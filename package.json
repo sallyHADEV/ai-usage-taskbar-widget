@@ -1,6 +1,6 @@
 {
   "name": "ai-usage-taskbar-widget",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Taskbar AI token usage monitor widget with multi-account authentication and 4 visual themes",
   "main": "dist-electron/main.js",
   "type": "module",
