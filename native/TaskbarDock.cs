@@ -81,6 +81,14 @@ namespace FluentFlyoutDocker
 
         static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 
+        static IntPtr ParseHwnd(string s)
+        {
+            long val = s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                ? Convert.ToInt64(s.Substring(2), 16)
+                : Convert.ToInt64(s);
+            return new IntPtr(val);
+        }
+
         static IntPtr GetTaskbarHandle()
         {
             IntPtr hwnd = FindWindow("Shell_TrayWnd", null);
@@ -91,8 +99,10 @@ namespace FluentFlyoutDocker
             return hwnd;
         }
 
-        // 현재 포그라운드 창이 모니터 전체를 덮는 전체화면(테두리 없음/전체화면 독점)인지 판별
-        static bool IsForegroundFullscreen()
+        // 현재 포그라운드 창이 "위젯이 있는 모니터"를 전체 화면으로 덮고 있는지 판별.
+        // widgetHwnd가 주어지면 포그라운드 창과 위젯이 같은 모니터에 있을 때만 전체화면으로 취급
+        // (다른 모니터에서 전체화면 앱에 포커스가 가도 위젯이 사라지지 않도록)
+        static bool IsForegroundFullscreen(IntPtr widgetHwnd)
         {
             IntPtr fg = GetForegroundWindow();
             if (fg == IntPtr.Zero) return false;
@@ -110,6 +120,13 @@ namespace FluentFlyoutDocker
             if (!GetWindowRect(fg, out winRect)) return false;
 
             IntPtr hMon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+
+            if (widgetHwnd != IntPtr.Zero && IsWindow(widgetHwnd))
+            {
+                IntPtr widgetMon = MonitorFromWindow(widgetHwnd, MONITOR_DEFAULTTONEAREST);
+                if (widgetMon != hMon) return false;
+            }
+
             MONITORINFO mi = new MONITORINFO();
             mi.cbSize = (uint)Marshal.SizeOf(typeof(MONITORINFO));
             if (!GetMonitorInfo(hMon, ref mi)) return false;
@@ -221,7 +238,8 @@ namespace FluentFlyoutDocker
             }
             else if (action == "isfgfullscreen")
             {
-                Console.WriteLine(IsForegroundFullscreen() ? "1" : "0");
+                IntPtr widgetHwnd = args.Length >= 2 ? ParseHwnd(args[1]) : IntPtr.Zero;
+                Console.WriteLine(IsForegroundFullscreen(widgetHwnd) ? "1" : "0");
                 return 0;
             }
             else if (action == "fswatch")
@@ -232,11 +250,13 @@ namespace FluentFlyoutDocker
                 if (args.Length >= 2) int.TryParse(args[1], out interval);
                 if (interval < 200) interval = 200;
 
+                IntPtr widgetHwnd = args.Length >= 3 ? ParseHwnd(args[2]) : IntPtr.Zero;
+
                 bool lastState = false;
                 bool first = true;
                 while (true)
                 {
-                    bool current = IsForegroundFullscreen();
+                    bool current = IsForegroundFullscreen(widgetHwnd);
                     if (first || current != lastState)
                     {
                         Console.WriteLine(current ? "1" : "0");

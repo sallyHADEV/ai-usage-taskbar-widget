@@ -618,7 +618,7 @@ app.whenReady().then(() => {
     }
   }, 2000)
 
-  TaskbarDocker.startFullscreenWatcher((isFullscreen) => {
+  TaskbarDocker.startFullscreenWatcher(widgetWindow!, (isFullscreen) => {
     if (!widgetWindow || widgetWindow.isDestroyed() || widgetManuallyHidden) return
 
     if (isFullscreen && widgetWindow.isVisible()) {

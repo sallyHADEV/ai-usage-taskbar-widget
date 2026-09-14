@@ -94,8 +94,10 @@ export class TaskbarDocker {
    * 전체화면(게임/영상) 감지를 위한 상주 워처 프로세스 1개만 기동 (짧은 주기로 매번 새 프로세스를
    * spawn하면 .NET 프로세스 기동 비용 때문에 시스템 전역에 커서 busy 현상이 생겨 상주 방식으로 변경)
    * 상태가 바뀔 때만 stdout에 "1"/"0" 한 줄이 오므로 그때만 콜백 호출
+   * widgetWin을 넘기면 그 창과 같은 모니터에서 전체화면일 때만 감지 (다른 모니터의 전체화면 앱에
+   * 포커스가 가도 위젯이 사라지지 않도록)
    */
-  public static startFullscreenWatcher(onChange: (isFullscreen: boolean) => void): void {
+  public static startFullscreenWatcher(widgetWin: BrowserWindow, onChange: (isFullscreen: boolean) => void): void {
     this.stopFullscreenWatcher()
 
     const exe = this.getDockerPath()
@@ -105,7 +107,8 @@ export class TaskbarDocker {
     }
 
     try {
-      this.fsWatchProcess = spawn(exe, ['fswatch', '1000'], { windowsHide: true })
+      const hwnd = (widgetWin && !widgetWin.isDestroyed()) ? this.getHwnd(widgetWin) : '0'
+      this.fsWatchProcess = spawn(exe, ['fswatch', '1000', hwnd], { windowsHide: true })
       let buffer = ''
       this.fsWatchProcess.stdout?.on('data', (chunk) => {
         buffer += chunk.toString()
