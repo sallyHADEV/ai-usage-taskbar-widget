@@ -18,6 +18,7 @@ const DEFAULT_CONFIG: WidgetConfig = {
   showCardBackground: true,
   showUsedPercent: false,
   placementMode: 'docked',
+  alwaysOnTop: true,
   openAtLogin: true
 }
 

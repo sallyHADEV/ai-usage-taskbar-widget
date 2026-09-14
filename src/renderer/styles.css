@@ -54,7 +54,7 @@ body.is-widget-view {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.005);
   display: block;
 }
 
@@ -66,6 +66,7 @@ body.is-widget-view #app {
   justify-content: flex-start;
   overflow: hidden;
   box-sizing: border-box;
+  cursor: pointer;
 }
 
 /* 위젯 컨테이너 */
@@ -95,9 +96,9 @@ body.is-widget-view #app {
   transform: scale(0.98);
 }
 
-/* 배경 카드 미표시 모드: 작업표시줄과 100% 투명 일체화 */
+/* 배경 카드 미표시 모드: 작업표시줄과 투명 일체화 (최소 알파로 마우스 클릭 감지) */
 .widget-root.no-card-bg {
-  background: transparent !important;
+  background: rgba(0, 0, 0, 0.005) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border: none !important;
@@ -284,16 +285,26 @@ body.is-widget-view #app {
   flex-shrink: 0;
 }
 
+.theme-1b .segment-meter-svg {
+  display: block;
+  flex-shrink: 0;
+  shape-rendering: geometricPrecision;
+}
+
+.theme-1b .segment-rect {
+  transition: fill 0.2s ease;
+}
+
 .theme-1b .segment-meter {
   display: flex;
-  gap: 1.5px;
+  gap: 2px;
   align-items: center;
   flex-shrink: 0;
 }
 
 .theme-1b .segment {
   width: 3px;
-  height: 4.5px;
+  height: 5px;
   border-radius: 1px;
   background: var(--bar-bg);
 }

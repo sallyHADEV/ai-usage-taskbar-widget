@@ -357,20 +357,38 @@ function renderSettingsTab(state: AppState): string {
             작업표시줄 오버레이 (권장)
           </button>
           <button class="theme-button ${cfg.placementMode === 'floating' ? 'active' : ''}" id="btn-place-floating">
-            작업표시줄 바로 위
+            작업 표시줄 바로 위
           </button>
         </div>
       </div>
 
+      <!-- 항상 위에 표시 ('작업 표시줄 바로 위' 전용) -->
+      <div class="form-group" id="group-always-on-top" style="${cfg.placementMode === 'floating' ? '' : 'display: none;'}">
+        <label class="form-label switch-container" for="chk-always-on-top">
+          <div>
+            <span>항상 위에 표시</span>
+            <div style="font-size: 9px; color: var(--text-muted); font-weight: 400;">
+              다른 전체 화면 및 일반 창보다 항상 위에 떠 있도록 고정합니다
+            </div>
+          </div>
+          <div class="md-switch">
+            <input type="checkbox" id="chk-always-on-top" ${cfg.alwaysOnTop !== false ? 'checked' : ''} />
+            <div class="md-switch-track">
+              <div class="md-switch-thumb"></div>
+            </div>
+          </div>
+        </label>
+      </div>
+
       <!-- 위치 및 정렬 -->
       <div class="form-group">
-        <label class="form-label">작업표시줄 위치 정렬</label>
+        <label class="form-label">위젯 위치 정렬</label>
         <div class="form-row">
           <button class="theme-button ${cfg.alignment === 'right' ? 'active' : ''}" id="btn-align-right">
-            우측 정렬 (트레이 좌측)
+            ${cfg.placementMode === 'floating' ? '우측 정렬 (화면 끝)' : '우측 정렬 (트레이 좌측)'}
           </button>
           <button class="theme-button ${cfg.alignment === 'left' ? 'active' : ''}" id="btn-align-left">
-            좌측 정렬 (시작버튼 우측)
+            ${cfg.placementMode === 'floating' ? '좌측 정렬 (화면 끝)' : '좌측 정렬 (시작버튼 우측)'}
           </button>
         </div>
       </div>
@@ -573,6 +591,11 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
 
   container.querySelector('#btn-place-floating')?.addEventListener('click', () => {
     window.api.updateConfig({ ...state.config, placementMode: 'floating', showCardBackground: true })
+  })
+
+  container.querySelector('#chk-always-on-top')?.addEventListener('change', (e) => {
+    const checked = (e.target as HTMLInputElement).checked
+    window.api.updateConfig({ ...state.config, alwaysOnTop: checked })
   })
 
   container.querySelector('#chk-open-at-login')?.addEventListener('change', (e) => {

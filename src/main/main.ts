@@ -67,6 +67,25 @@ function broadcastState() {
   }
 }
 
+function applyWindowTopmost(config: WidgetConfig) {
+  if (!widgetWindow || widgetWindow.isDestroyed()) return
+
+  if (config.placementMode === 'floating') {
+    // 플로팅 모드는 C# staytop 프로세스를 중단하고 Electron의 네이티브 alwaysOnTop만 제어
+    TaskbarDocker.stopStayTop()
+    const isAlwaysTop = config.alwaysOnTop !== false
+    if (isAlwaysTop) {
+      widgetWindow.setAlwaysOnTop(true, 'screen-saver', 9999)
+    } else {
+      widgetWindow.setAlwaysOnTop(false)
+    }
+  } else {
+    // 작업표시줄 내부 도킹 모드는 뒤로 숨지 않도록 최상위 유지
+    widgetWindow.setAlwaysOnTop(true, 'screen-saver', 9999)
+    TaskbarDocker.startStayTop(widgetWindow)
+  }
+}
+
 function updateWidgetBounds() {
   if (!widgetWindow || widgetWindow.isDestroyed()) return
   const config = accountStore.getConfig()
@@ -90,9 +109,8 @@ function createWidgetWindow() {
     skipTaskbar: true,
     resizable: false,
     hasShadow: false,
-    focusable: false, // 포커스를 받지 않아 작업표시줄 클릭 시 Z-order 강등 방지
+    focusable: true, // 마우스 클릭 이벤트가 정상적으로 DOM에 전달되도록 true 유지
     show: false,
-    type: 'toolbar',
     title: '', // 불필요한 시스템 타이틀 노출 원천 차단
     webPreferences: {
       preload: getPreloadPath(),
@@ -117,7 +135,7 @@ function createWidgetWindow() {
     widgetWindow?.showInactive()
     updateWidgetBounds()
     if (widgetWindow) {
-      TaskbarDocker.startStayTop(widgetWindow)
+      applyWindowTopmost(config)
     }
   })
 
@@ -434,6 +452,10 @@ function setupIpcHandlers() {
     }
 
     updateWidgetBounds()
+    applyWindowTopmost(nextConfig)
+    // [불변 원칙]: 팝업창은 최초 등장 시점에만 위젯 위치 기준으로 좌표를 설정합니다.
+    // 사용자가 팝업창을 열고 조작(슬라이더 등)하는 동안에는 팝업 위치가 이동하면 안 되므로
+    // 설정 변경(UPDATE_CONFIG) 시 positionPopupWindow()를 절대 호출하지 않습니다.
     broadcastState()
     return getAppState()
   })

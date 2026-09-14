@@ -4,7 +4,7 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { app, screen, type BrowserWindow } from 'electron'
 import type { WidgetConfig } from '../common/types.js'
-import { getTaskbarInfo } from './taskbar-position.js'
+import { calculateWidgetPosition, getTaskbarInfo } from './taskbar-position.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -62,7 +62,7 @@ export class TaskbarDocker {
     console.log(`[TaskbarDocker] Starting bulletproof staytop for HWND ${hwnd}...`)
 
     try {
-      this.stayTopProcess = spawn(exe, ['staytop', hwnd, '35'], {
+      this.stayTopProcess = spawn(exe, ['staytop', hwnd, '600'], {
         detached: false,
         stdio: 'ignore',
         windowsHide: true
@@ -97,29 +97,7 @@ export class TaskbarDocker {
     width: number,
     height: number
   ): { x: number; y: number } {
-    const primaryDisplay = screen.getPrimaryDisplay()
-    const taskbar = getTaskbarInfo()
-    const screenWidth = primaryDisplay.bounds.width
-    const trayWidth = 220
-    const offset = Math.max(0, config.offsetPx !== undefined ? config.offsetPx : 20)
-
-    let x: number
-    if (config.alignment === 'left') {
-      x = 64 + offset
-    } else {
-      x = screenWidth - trayWidth - width - offset
-    }
-    x = Math.max(12, Math.min(x, screenWidth - width - 12))
-
-    let y: number
-    if (config.placementMode === 'floating') {
-      y = taskbar.taskbarY - height - 4 + (config.verticalOffsetPx || 0)
-    } else {
-      const d = Math.max(0, Math.floor((taskbar.taskbarHeight - height) / 2))
-      y = taskbar.taskbarY + d + (config.verticalOffsetPx || 0)
-    }
-
-    return { x, y }
+    return calculateWidgetPosition(config, width, height)
   }
 
   /**

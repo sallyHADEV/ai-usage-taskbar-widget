@@ -93,12 +93,7 @@ namespace FluentFlyoutDocker
                 if (args.Length >= 3) int.TryParse(args[2], out interval);
                 if (interval < 10) interval = 10;
 
-                // 1. 포커스 가로채기 방지 및 툴윈도우 스타일
-                int exStyle = GetWindowLong(childHwnd, GWL_EXSTYLE);
-                exStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
-                SetWindowLong(childHwnd, GWL_EXSTYLE, exStyle);
-
-                // 2. 초기 HWND_TOPMOST
+                // 초기 HWND_TOPMOST 설정 (SWP_NOACTIVATE 플래그로 포커스 가로채지 않고 최상위 유지)
                 SetWindowPos(childHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
                 Console.WriteLine("STAYTOP_STARTED");

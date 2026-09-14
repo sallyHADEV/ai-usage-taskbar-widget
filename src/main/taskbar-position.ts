@@ -51,17 +51,29 @@ export function calculateWidgetPosition(
   const taskbar = getTaskbarInfo()
   const trayWidth = 220
   const offset = Math.max(0, config.offsetPx !== undefined ? config.offsetPx : 20)
+  const isFloating = config.placementMode === 'floating'
 
   let x: number
-  if (config.alignment === 'left') {
-    x = 64 + offset
+  if (isFloating) {
+    // '작업 표시줄 바로 위' 플로팅 모드: 오프셋 시작 위치가 해상도 끝 (화면 끝 기준)
+    if (config.alignment === 'left') {
+      x = bounds.x + offset
+    } else {
+      x = bounds.x + bounds.width - widgetWidth - offset
+    }
+    x = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width - widgetWidth))
   } else {
-    x = bounds.width - trayWidth - widgetWidth - offset
+    // 작업표시줄 내부 도킹 모드: 트레이 영역 좌측 / 시작 버튼 우측 기준
+    if (config.alignment === 'left') {
+      x = bounds.x + 64 + offset
+    } else {
+      x = bounds.x + bounds.width - trayWidth - widgetWidth - offset
+    }
+    x = Math.max(bounds.x + 12, Math.min(x, bounds.x + bounds.width - widgetWidth - 12))
   }
-  x = Math.max(12, Math.min(x, bounds.width - widgetWidth - 12))
 
   let y: number
-  if (config.placementMode === 'floating') {
+  if (isFloating) {
     y = taskbar.taskbarY - widgetHeight - 4 + (config.verticalOffsetPx || 0)
   } else {
     const d = Math.max(0, Math.floor((taskbar.taskbarHeight - widgetHeight) / 2))

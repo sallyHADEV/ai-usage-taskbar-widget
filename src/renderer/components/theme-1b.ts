@@ -4,14 +4,22 @@ import { renderAiIcon } from './ai-icons.js'
 
 function renderSegments(percent: number, activeColor: string, totalSegments = 10): string {
   const activeCount = Math.round((percent / 100) * totalSegments)
-  let html = '<div class="segment-meter">'
+  const segWidth = 3.2
+  const segHeight = 5.2
+  const segGap = 1.6
+  const rx = 0.8
+  const totalWidth = 47
+  const totalHeight = 6
+
+  let rects = ''
   for (let i = 0; i < totalSegments; i++) {
     const isActive = i < activeCount
-    const style = isActive ? `background-color: ${activeColor};` : ''
-    html += `<span class="segment ${isActive ? 'active' : ''}" style="${style}"></span>`
+    const fill = isActive ? activeColor : 'rgba(255, 255, 255, 0.14)'
+    const x = (i * (segWidth + segGap)).toFixed(1)
+    rects += `<rect class="segment-rect" x="${x}" y="0.4" width="${segWidth}" height="${segHeight}" rx="${rx}" fill="${fill}" />`
   }
-  html += '</div>'
-  return html
+
+  return `<svg class="segment-meter-svg" viewBox="0 0 ${totalWidth} ${totalHeight}" width="${totalWidth}" height="${totalHeight}">${rects}</svg>`
 }
 
 export function renderTheme1b(account: AccountUsage, config: WidgetConfig): string {

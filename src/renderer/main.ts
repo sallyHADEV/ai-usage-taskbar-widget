@@ -244,10 +244,22 @@ async function init() {
       renderPopup(nextState)
     })
   } else {
-    // 위젯 클릭 시 팝업 토글 (호버링 팝업 제거)
-    appEl.addEventListener('click', (e) => {
+    // 위젯 클릭/포인터 이벤트 시 팝업 토글 (중복 트리거 방지 디바운스 적용)
+    let lastToggleTime = 0
+    const triggerToggle = (e: Event) => {
       e.stopPropagation()
+      const now = Date.now()
+      if (now - lastToggleTime < 300) return
+      lastToggleTime = now
+      console.log('[Widget] Triggering togglePopup via user interaction')
       window.api.togglePopup()
+    }
+
+    appEl.addEventListener('click', triggerToggle)
+    appEl.addEventListener('pointerup', (e) => {
+      if ((e as PointerEvent).button === 0) {
+        triggerToggle(e)
+      }
     })
 
     renderWidget(state)
