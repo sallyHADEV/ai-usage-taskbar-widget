@@ -1,0 +1,39 @@
+{
+  "name": "ai-usage-taskbar-widget",
+  "version": "1.0.0",
+  "description": "Taskbar AI token usage monitor widget with multi-account authentication and 4 visual themes",
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build:native": "powershell -ExecutionPolicy Bypass -Command \"& 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe' /target:winexe /optimize+ /out:native\\TaskbarDock.exe native\\TaskbarDock.cs\"",
+    "build": "npm run build:native && tsc && vite build",
+    "update-app": "npm run build && powershell -ExecutionPolicy Bypass -Command \"Copy-Item -Path dist,dist-electron,native,public,package.json -Destination dist-release\\win-unpacked\\resources\\app -Recurse -Force; Copy-Item -Path native,public -Destination dist-release\\win-unpacked -Recurse -Force\"",
+    "start": "electron dist-electron/main.js",
+    "dist": "npm run build && electron-builder --win --dir",
+    "dist:exe": "npm run build && electron-builder --win portable"
+  },
+  "keywords": [
+    "ai",
+    "usage",
+    "taskbar",
+    "widget",
+    "antigravity",
+    "gemini",
+    "claude"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "dependencies": {
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "electron": "^34.2.0",
+    "electron-builder": "^26.15.3",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  }
+}

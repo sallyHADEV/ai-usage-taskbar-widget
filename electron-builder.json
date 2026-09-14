@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.antigravity.ai-usage-widget",
+  "productName": "AI Usage Widget",
+  "asar": false,
+  "directories": {
+    "output": "dist-release"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*",
+    "native/**/*",
+    "public/**/*",
+    "package.json"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "dir",
+        "arch": ["x64"]
+      }
+    ]
+  }
+}

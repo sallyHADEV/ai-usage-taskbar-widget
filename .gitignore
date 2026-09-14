@@ -1,0 +1,76 @@
+# 의존성 패키지
+node_modules/
+.pnp/
+.pnp.js
+
+# 빌드 및 번들링 산출물 (Vite / TypeScript / Electron)
+dist/
+dist-*/
+build/
+build-*/
+release/
+release-*/
+.vite/
+
+# 배포 패키징 아티팩트
+*.zip
+*.tar.gz
+*.dmg
+*.AppImage
+*.asar
+
+# 환경변수 및 인증/토큰 정보 (보안 필수)
+.env
+.env.*
+!.env.example
+*.local
+*oauth_creds*.json
+*credentials*.json
+*.token
+*.pem
+*.key
+
+# AI 개발 기획 / 세션 논의 / 어시스턴트 내부 산출물
+docs/superpowers/
+.gemini/
+.antigravity/
+.system_generated/
+.serena/
+*.chat
+*.prompt
+
+# 로컬 개발/디버깅 임시 스크립트 및 덤프 데이터
+scripts/
+*.ps1
+*.dump
+*.dump.json
+dump_*.json
+*_dump.json
+
+# 로그 및 임시 파일
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tmp
+*.bak
+reference_*
+
+# 로컬 런타임 데이터 및 캐시
+.data/
+
+# 운영체제 및 IDE 설정
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.suo
+*.user
+
+# .NET / C# 빌드 산출물
+bin/
+obj/
+*.pdb
+*.exe
+native/*.exe

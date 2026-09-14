@@ -1,0 +1,618 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, Tray } from 'electron'
+import { IPC_CHANNELS } from '../common/ipc-events.js'
+import type { AccountConfig, AppState, WidgetConfig } from '../common/types.js'
+import { AccountStore } from '../services/account-store.js'
+import { GoogleOAuthService } from '../services/google-oauth.js'
+import { QuotaManager } from '../services/quota-manager.js'
+import { calculatePopupPosition, calculateWidgetPosition, getTaskbarInfo } from './taskbar-position.js'
+import { LocalAppDetector } from '../services/local-app-detector.js'
+import { TaskbarDocker } from './taskbar-docker.js'
+import { CodexAppServerClient } from '../services/codex-app-server-client.js'
+
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+function getPreloadPath(): string {
+  const cjsPath = path.join(__dirname, 'preload.cjs')
+  if (fs.existsSync(cjsPath)) return cjsPath
+  return path.join(__dirname, 'preload.js')
+}
+
+// 일관된 userData 경로 유지 (개발/프로덕션 동일 설정 공유)
+app.name = 'ai-usage-taskbar-widget'
+
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+  process.exit(0)
+}
+
+// 백그라운드 스로틀링 해제 (작업표시줄 상시 모니터링)
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+
+let widgetWindow: BrowserWindow | null = null
+let popupWindow: BrowserWindow | null = null
+let tray: Tray | null = null
+let accountStore: AccountStore
+let quotaManager: QuotaManager
+
+let currentWidgetWidth = 520
+let currentWidgetHeight = 36
+const POPUP_WIDTH = 380
+const POPUP_HEIGHT = 440
+
+let isPopupLocked = false // 클릭으로 열었거나 팝업 조작 중일 때 자동 닫힘 방지
+let popupHideTimer: NodeJS.Timeout | null = null
+
+function getAppState(): AppState {
+  return {
+    config: accountStore.getConfig(),
+    accounts: accountStore.getAccounts(),
+    usages: quotaManager.getUsages(),
+    isRefreshing: false,
+    lastRefreshedAt: new Date().toISOString()
+  }
+}
+
+function broadcastState() {
+  const state = getAppState()
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.webContents.send(IPC_CHANNELS.STATE_CHANGED, state)
+  }
+  if (popupWindow && !popupWindow.isDestroyed()) {
+    popupWindow.webContents.send(IPC_CHANNELS.STATE_CHANGED, state)
+  }
+}
+
+function updateWidgetBounds() {
+  if (!widgetWindow || widgetWindow.isDestroyed()) return
+  const config = accountStore.getConfig()
+  TaskbarDocker.applyBounds(widgetWindow, config, currentWidgetWidth, currentWidgetHeight)
+}
+
+function createWidgetWindow() {
+  const config = accountStore.getConfig()
+  const { x, y } = TaskbarDocker.calculatePosition(config, currentWidgetWidth, currentWidgetHeight)
+
+  console.log(`[Widget] Creating widget window at (${x}, ${y}) size ${currentWidgetWidth}x${currentWidgetHeight}`)
+
+  widgetWindow = new BrowserWindow({
+    x,
+    y,
+    width: currentWidgetWidth,
+    height: currentWidgetHeight,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    hasShadow: false,
+    focusable: false, // 포커스를 받지 않아 작업표시줄 클릭 시 Z-order 강등 방지
+    show: false,
+    type: 'toolbar',
+    title: '', // 불필요한 시스템 타이틀 노출 원천 차단
+    webPreferences: {
+      preload: getPreloadPath(),
+      nodeIntegration: false,
+      contextIsolation: true,
+      backgroundThrottling: false
+    }
+  })
+
+  widgetWindow.setAlwaysOnTop(true, 'screen-saver', 9999)
+  widgetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+  widgetWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    console.error('[WidgetWindow] Load failed:', code, desc, url)
+  })
+
+  widgetWindow.webContents.on('console-message', (_e, _level, msg) => {
+    console.log('[WidgetWindow Console]:', msg)
+  })
+
+  widgetWindow.once('ready-to-show', () => {
+    widgetWindow?.showInactive()
+    updateWidgetBounds()
+    if (widgetWindow) {
+      TaskbarDocker.startStayTop(widgetWindow)
+    }
+  })
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    widgetWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}#view=widget`)
+  } else {
+    widgetWindow.loadFile(path.join(__dirname, '../dist/index.html'), { hash: 'view=widget', query: { view: 'widget' } })
+  }
+
+  widgetWindow.on('closed', () => {
+    widgetWindow = null
+  })
+}
+
+function positionPopupWindow() {
+  if (!popupWindow || popupWindow.isDestroyed()) return
+  const config = accountStore.getConfig()
+
+  let widgetX: number
+  let widgetY: number
+  let widgetW: number
+
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    const bounds = widgetWindow.getBounds()
+    widgetX = bounds.x
+    widgetY = bounds.y
+    widgetW = bounds.width
+  } else {
+    const pos = calculateWidgetPosition(config, currentWidgetWidth, currentWidgetHeight)
+    widgetX = pos.x
+    widgetY = pos.y
+    widgetW = currentWidgetWidth
+  }
+
+  const popupPos = calculatePopupPosition(widgetX, widgetW, POPUP_WIDTH, POPUP_HEIGHT, widgetY)
+
+  popupWindow.setBounds({
+    x: popupPos.x,
+    y: popupPos.y,
+    width: POPUP_WIDTH,
+    height: POPUP_HEIGHT
+  })
+}
+
+function createPopupWindow() {
+  const config = accountStore.getConfig()
+  const widgetPos = calculateWidgetPosition(config, currentWidgetWidth, currentWidgetHeight)
+  const actualWidgetY = (widgetWindow && !widgetWindow.isDestroyed()) ? widgetWindow.getBounds().y : widgetPos.y
+  const popupPos = calculatePopupPosition(widgetPos.x, currentWidgetWidth, POPUP_WIDTH, POPUP_HEIGHT, actualWidgetY)
+
+  popupWindow = new BrowserWindow({
+    x: popupPos.x,
+    y: popupPos.y,
+    width: POPUP_WIDTH,
+    height: POPUP_HEIGHT,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    show: false,
+    title: '', // 불필요한 타이틀 제거
+    webPreferences: {
+      preload: getPreloadPath(),
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  })
+
+  popupWindow.setAlwaysOnTop(true, 'screen-saver', 9999)
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    popupWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}#view=popup`)
+  } else {
+    popupWindow.loadFile(path.join(__dirname, '../dist/index.html'), { hash: 'view=popup', query: { view: 'popup' } })
+  }
+
+  popupWindow.on('blur', () => {
+    if (!isPopupLocked) {
+      scheduleHidePopup(600)
+    }
+  })
+
+  popupWindow.on('closed', () => {
+    popupWindow = null
+  })
+}
+
+function showPopup(focus = false, lock = false) {
+  cancelHidePopup()
+  if (lock) {
+    isPopupLocked = true
+  }
+
+  if (!popupWindow || popupWindow.isDestroyed()) {
+    createPopupWindow()
+  }
+  if (!popupWindow) return
+  const isAlreadyVisible = popupWindow.isVisible()
+
+  if (!isAlreadyVisible) {
+    // 팝업이 닫혀 있다가 새로 열릴 때만 위젯의 현재 위치를 기준으로 좌표를 결정하여 띄움 (뜬 후에는 자리 고정)
+    positionPopupWindow()
+
+    if (focus) {
+      popupWindow.show()
+      popupWindow.focus()
+    } else {
+      popupWindow.showInactive()
+    }
+    popupWindow.webContents.send(IPC_CHANNELS.STATE_CHANGED, getAppState())
+  } else if (focus) {
+    popupWindow.focus()
+  }
+}
+
+function scheduleHidePopup(delayMs = 400) {
+  if (isPopupLocked) {
+    return
+  }
+  cancelHidePopup()
+  popupHideTimer = setTimeout(() => {
+    if (!isPopupLocked) {
+      hidePopup(true)
+    }
+    popupHideTimer = null
+  }, delayMs)
+}
+
+function cancelHidePopup() {
+  if (popupHideTimer) {
+    clearTimeout(popupHideTimer)
+    popupHideTimer = null
+  }
+}
+
+function hidePopup(force = false) {
+  if (!force && isPopupLocked) {
+    return
+  }
+  isPopupLocked = false
+  cancelHidePopup()
+  if (popupWindow && !popupWindow.isDestroyed() && popupWindow.isVisible()) {
+    popupWindow.hide()
+  }
+}
+
+function togglePopup() {
+  cancelHidePopup()
+  if (popupWindow && popupWindow.isVisible()) {
+    hidePopup(true)
+  } else {
+    showPopup(true, true) // 클릭으로 열 때는 닫기 버튼 누를 때까지 락 유지
+  }
+}
+
+function getTrayIconImage(): Electron.NativeImage {
+  const candidates = [
+    path.join(__dirname, '../public/tray-icon.ico'),
+    path.join(__dirname, '../public/tray-icon.png'),
+    path.join(app.getAppPath(), 'public/tray-icon.ico'),
+    path.join(app.getAppPath(), 'public/tray-icon.png'),
+    path.join(process.resourcesPath, 'public/tray-icon.ico'),
+    path.join(process.resourcesPath, 'public/tray-icon.png')
+  ]
+
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      const img = nativeImage.createFromPath(p)
+      if (!img.isEmpty()) return img
+    }
+  }
+
+  // fallback
+  return nativeImage.createFromBuffer(
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAA9SURBVDhPY/wPBAwUACZSDaBkwzCgZANiDGDFyAbA5EkaBt0AYgwkGQwDYAYzEaMZZQZgBmgwA9F/IGAAAGXvCflG0g+xAAAAAElFTkSuQmCC',
+      'base64'
+    )
+  )
+}
+
+function applyAutoLaunch(enable: boolean) {
+  try {
+    if (!app.isPackaged) {
+      // 개발 모드에서는 node_modules/electron/dist/electron.exe가 인자 없이 시작프로그램에 등록되어
+      // 부팅 시 기본 Electron 환영 창이 뜨는 현상을 방지하기 위해 등록을 해제합니다.
+      app.setLoginItemSettings({
+        openAtLogin: false,
+        path: process.execPath
+      })
+      updateTrayMenu()
+      return
+    }
+
+    app.setLoginItemSettings({
+      openAtLogin: enable,
+      path: process.execPath,
+      args: ['--hidden']
+    })
+    updateTrayMenu()
+  } catch (err) {
+    console.warn('[Main] Failed to setLoginItemSettings:', err)
+  }
+}
+
+function updateTrayMenu() {
+  if (!tray || tray.isDestroyed()) return
+  const config = accountStore.getConfig()
+  const isAutoStart = app.isPackaged
+    ? (app.getLoginItemSettings().openAtLogin ?? config.openAtLogin ?? true)
+    : (config.openAtLogin ?? false)
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '위젯 표시/숨김',
+      click: () => {
+        if (!widgetWindow) return
+        if (widgetWindow.isVisible()) {
+          widgetWindow.hide()
+          hidePopup(true)
+        } else {
+          widgetWindow.show()
+          updateWidgetBounds()
+        }
+      }
+    },
+    {
+      label: '상세 팝업 열기',
+      click: () => showPopup(true, true)
+    },
+    { type: 'separator' },
+    {
+      label: '윈도우 시작 시 자동 실행',
+      type: 'checkbox',
+      checked: isAutoStart,
+      click: (item) => {
+        const nextConfig = { ...accountStore.getConfig(), openAtLogin: item.checked }
+        accountStore.saveConfig(nextConfig)
+        applyAutoLaunch(item.checked)
+        broadcastState()
+      }
+    },
+    {
+      label: '지금 새로고침',
+      click: () => {
+        quotaManager.refreshAll().then(() => broadcastState())
+      }
+    },
+    {
+      label: 'Google 계정 추가...',
+      click: async () => {
+        const res = await GoogleOAuthService.startLogin()
+        if (res.success && res.email) {
+          accountStore.addAccount({
+            id: `google-${Date.now()}`,
+            name: res.email.split('@')[0],
+            provider: 'google',
+            enabled: true,
+            tokens: {
+              accessToken: res.accessToken!,
+              refreshToken: res.refreshToken || '',
+              expiresAt: res.expiresAt || Date.now() + 3600000,
+              email: res.email,
+              projectId: res.projectId
+            }
+          })
+          await quotaManager.refreshAll()
+          broadcastState()
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '종료',
+      click: () => {
+        app.quit()
+      }
+    }
+  ])
+
+  tray.setContextMenu(contextMenu)
+}
+
+function createTray() {
+  const iconCanvas = getTrayIconImage()
+  tray = new Tray(iconCanvas)
+  tray.setToolTip('AI 토큰 사용량 위젯')
+
+  updateTrayMenu()
+
+  tray.on('click', () => {
+    togglePopup()
+  })
+}
+
+function setupIpcHandlers() {
+  ipcMain.handle(IPC_CHANNELS.GET_STATE, () => {
+    return getAppState()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_CONFIG, (_event, nextConfig: WidgetConfig) => {
+    const prevConfig = accountStore.getConfig()
+    accountStore.saveConfig(nextConfig)
+
+    // 윈도우 시작 시 실행 설정 변경 시 적용
+    if (prevConfig.openAtLogin !== nextConfig.openAtLogin && nextConfig.openAtLogin !== undefined) {
+      applyAutoLaunch(nextConfig.openAtLogin)
+    }
+
+    // 갱신 주기 변경 시 폴링 인터벌 동적 재적용
+    if (prevConfig.refreshIntervalSec !== nextConfig.refreshIntervalSec) {
+      quotaManager.startPolling(nextConfig.refreshIntervalSec, false)
+    }
+
+    updateWidgetBounds()
+    broadcastState()
+    return getAppState()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.REFRESH_QUOTA, async () => {
+    await quotaManager.refreshAll()
+    broadcastState()
+    return getAppState()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ADD_GOOGLE_OAUTH, async () => {
+    try {
+      const res = await GoogleOAuthService.startLogin()
+      if (res.success && res.email) {
+        accountStore.addAccount({
+          id: `google-${Date.now()}`,
+          name: res.email.split('@')[0],
+          provider: 'google',
+          enabled: true,
+          tokens: {
+            accessToken: res.accessToken!,
+            refreshToken: res.refreshToken || '',
+            expiresAt: res.expiresAt || Date.now() + 3600000,
+            email: res.email,
+            projectId: res.projectId
+          }
+        })
+        await quotaManager.refreshAll()
+        broadcastState()
+        return { success: true }
+      }
+      return { success: false, error: res.error || 'Login canceled or failed' }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ADD_CUSTOM_ACCOUNT, (_event, acc: Partial<AccountConfig>) => {
+    const newAcc: AccountConfig = {
+      id: acc.id || `custom-${Date.now()}`,
+      name: acc.name || 'Custom Account',
+      provider: acc.provider || 'custom',
+      enabled: true,
+      customMock: acc.customMock || {
+        primaryPercent: 50,
+        primaryReset: '2h 30m',
+        weeklyPercent: 30,
+        weeklyReset: '4d 12h',
+        iconLetter: (acc.name || 'C').charAt(0).toUpperCase(),
+        brandColor: '#3B82F6'
+      }
+    }
+    accountStore.addAccount(newAcc)
+    quotaManager.refreshAll().then(() => broadcastState())
+    return getAppState()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RESTORE_DETECTED_APP, (_event, appData: any) => {
+    accountStore.restoreDetectedAccount(appData)
+    quotaManager.refreshAll().then(() => broadcastState())
+    return getAppState()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RESET_DEFAULT_ACCOUNTS, () => {
+    accountStore.resetToDefaultAccounts()
+    quotaManager.refreshAll().then(() => broadcastState())
+    return getAppState()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TOGGLE_ACCOUNT, (_event, id: string, enabled: boolean) => {
+    accountStore.toggleAccount(id, enabled)
+    quotaManager.refreshAll().then(() => broadcastState())
+    return getAppState()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.REMOVE_ACCOUNT, (_event, id: string) => {
+    accountStore.removeAccount(id)
+    broadcastState()
+    return getAppState()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.REORDER_ACCOUNT, (_event, id: string, direction: 'up' | 'down') => {
+    accountStore.reorderAccount(id, direction)
+    broadcastState()
+    return getAppState()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SHOW_POPUP, () => {
+    showPopup(false, false)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.HIDE_POPUP, () => {
+    hidePopup(true)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TOGGLE_POPUP, () => {
+    togglePopup()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LOCK_POPUP, () => {
+    isPopupLocked = true
+    cancelHidePopup()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.UNLOCK_POPUP, () => {
+    isPopupLocked = false
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RESIZE_WIDGET, (_event, width: number, height: number) => {
+    if (width > 0 && height > 0) {
+      currentWidgetWidth = Math.round(width)
+      currentWidgetHeight = Math.round(height)
+      updateWidgetBounds()
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.OPEN_SETTINGS, () => {
+    showPopup(true, true)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DETECT_LOCAL_APPS, async () => {
+    return await LocalAppDetector.detectAll()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULE_HIDE_POPUP, (_event, delayMs?: number) => {
+    scheduleHidePopup(delayMs || 400)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CANCEL_HIDE_POPUP, () => {
+    cancelHidePopup()
+  })
+}
+
+app.whenReady().then(() => {
+  accountStore = new AccountStore()
+  quotaManager = new QuotaManager(accountStore)
+
+  quotaManager.addListener(() => {
+    broadcastState()
+  })
+
+  setupIpcHandlers()
+  createWidgetWindow()
+  createPopupWindow()
+  createTray()
+  applyAutoLaunch(accountStore.getConfig().openAtLogin ?? true)
+
+  quotaManager.startPolling(accountStore.getConfig().refreshIntervalSec)
+
+  setInterval(() => {
+    if (widgetWindow && !widgetWindow.isDestroyed() && widgetWindow.isVisible()) {
+      widgetWindow.moveTop()
+    }
+  }, 2000)
+
+  // 디스플레이 해상도, 작업표시줄 크기 변화 또는 모니터 연결/해제 시 위젯 위치 재배치
+  const onScreenChange = () => {
+    updateWidgetBounds()
+  }
+  screen.on('display-metrics-changed', onScreenChange)
+  screen.on('display-added', onScreenChange)
+  screen.on('display-removed', onScreenChange)
+})
+
+app.on('window-all-closed', () => {
+  // 트레이에 상주하므로 창이 닫혀도 앱 종료 방지
+})
+
+app.on('before-quit', () => {
+  cancelHidePopup()
+  if (quotaManager) {
+    quotaManager.stopPolling()
+  }
+  TaskbarDocker.stopStayTop()
+  CodexAppServerClient.close()
+  if (tray) {
+    try {
+      tray.destroy()
+    } catch {}
+    tray = null
+  }
+})

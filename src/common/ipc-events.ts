@@ -1,0 +1,23 @@
+export const IPC_CHANNELS = {
+  GET_STATE: 'app:get-state',
+  UPDATE_CONFIG: 'app:update-config',
+  REFRESH_QUOTA: 'app:refresh-quota',
+  ADD_GOOGLE_OAUTH: 'account:add-google-oauth',
+  ADD_CUSTOM_ACCOUNT: 'account:add-custom-account',
+  RESTORE_DETECTED_APP: 'account:restore-detected-app',
+  RESET_DEFAULT_ACCOUNTS: 'account:reset-default-accounts',
+  TOGGLE_ACCOUNT: 'account:toggle-account',
+  REMOVE_ACCOUNT: 'account:remove-account',
+  REORDER_ACCOUNT: 'account:reorder-account',
+  SHOW_POPUP: 'window:show-popup',
+  HIDE_POPUP: 'window:hide-popup',
+  TOGGLE_POPUP: 'window:toggle-popup',
+  LOCK_POPUP: 'window:lock-popup',
+  UNLOCK_POPUP: 'window:unlock-popup',
+  RESIZE_WIDGET: 'window:resize-widget',
+  STATE_CHANGED: 'state:changed',
+  OPEN_SETTINGS: 'window:open-settings',
+  DETECT_LOCAL_APPS: 'app:detect-local-apps',
+  SCHEDULE_HIDE_POPUP: 'window:schedule-hide-popup',
+  CANCEL_HIDE_POPUP: 'window:cancel-hide-popup'
+} as const
