@@ -33,6 +33,18 @@ namespace FluentFlyoutDocker
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool SetThreadDesktop(IntPtr hDesktop);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT
         {
@@ -41,6 +53,17 @@ namespace FluentFlyoutDocker
             public int Right;
             public int Bottom;
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MONITORINFO
+        {
+            public uint cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+        }
+
+        const uint MONITOR_DEFAULTTONEAREST = 2;
 
         const int GWL_STYLE = -16;
         const int GWL_EXSTYLE = -20;
@@ -165,6 +188,50 @@ namespace FluentFlyoutDocker
                 IntPtr childHwnd = new IntPtr(childHwndVal);
                 SetWindowPos(childHwnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
                 Console.WriteLine("SETPOS_OK");
+                return 0;
+            }
+            else if (action == "isfgfullscreen")
+            {
+                // 현재 포그라운드 창이 모니터 전체를 덮는 전체화면(테두리 없음/전체화면 독점)인지 판별
+                IntPtr fg = GetForegroundWindow();
+                if (fg == IntPtr.Zero)
+                {
+                    Console.WriteLine("0");
+                    return 0;
+                }
+
+                var classNameBuf = new System.Text.StringBuilder(256);
+                GetClassName(fg, classNameBuf, classNameBuf.Capacity);
+                string className = classNameBuf.ToString();
+                // 바탕화면/탐색기/작업표시줄 자체는 전체화면으로 취급하지 않음
+                if (className == "Progman" || className == "WorkerW" || className == "Shell_TrayWnd" || className == "Shell_SecondaryTrayWnd")
+                {
+                    Console.WriteLine("0");
+                    return 0;
+                }
+
+                RECT winRect;
+                if (!GetWindowRect(fg, out winRect))
+                {
+                    Console.WriteLine("0");
+                    return 0;
+                }
+
+                IntPtr hMon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi = new MONITORINFO();
+                mi.cbSize = (uint)Marshal.SizeOf(typeof(MONITORINFO));
+                if (!GetMonitorInfo(hMon, ref mi))
+                {
+                    Console.WriteLine("0");
+                    return 0;
+                }
+
+                bool isFullscreen = winRect.Left <= mi.rcMonitor.Left
+                    && winRect.Top <= mi.rcMonitor.Top
+                    && winRect.Right >= mi.rcMonitor.Right
+                    && winRect.Bottom >= mi.rcMonitor.Bottom;
+
+                Console.WriteLine(isFullscreen ? "1" : "0");
                 return 0;
             }
             else if (action == "gettaskbar")

@@ -90,6 +90,29 @@ export class TaskbarDocker {
   }
 
   /**
+   * 현재 포그라운드 창이 모니터 전체를 덮는 전체화면 상태인지 확인 (게임/영상 전체화면 시 위젯 자동 숨김용)
+   */
+  public static checkForegroundFullscreen(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const exe = this.getDockerPath()
+      if (!fs.existsSync(exe)) {
+        resolve(false)
+        return
+      }
+
+      try {
+        const proc = spawn(exe, ['isfgfullscreen'], { windowsHide: true })
+        let output = ''
+        proc.stdout?.on('data', (chunk) => { output += chunk.toString() })
+        proc.on('error', () => resolve(false))
+        proc.on('close', () => resolve(output.trim() === '1'))
+      } catch {
+        resolve(false)
+      }
+    })
+  }
+
+  /**
    * 화면 및 작업표시줄 기준 절대 좌표 계산 (정확한 좌/우측 정렬 보장)
    */
   public static calculatePosition(

@@ -4,6 +4,11 @@ import { renderTheme1b } from './components/theme-1b.js'
 import { renderTheme1c } from './components/theme-1c.js'
 import { renderTheme1d } from './components/theme-1d.js'
 import type { AppState } from '../common/types.js'
+import { detectLang, setLang, t } from '../common/i18n.js'
+
+const lang = detectLang(navigator.language)
+setLang(lang)
+document.documentElement.lang = lang
 
 const urlParams = new URLSearchParams(window.location.search)
 const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
@@ -42,7 +47,7 @@ function renderWidget(state: AppState) {
   if (isEmpty) {
     // 연결된 계정이 없을 때: 하얀색 작은 동그라미 더미 아이콘 표시
     accountsHtml = `
-      <div class="white-circle-dot" title="연결된 AI 계정 없음 (클릭하여 계정 추가 또는 로컬 앱 감지)"></div>
+      <div class="white-circle-dot" title="${t('noAccountTitle')}"></div>
     `
   } else {
     accountsHtml = activeUsages.map((u) => {
@@ -62,7 +67,7 @@ function renderWidget(state: AppState) {
 
   const showCard = state.config.showCardBackground ?? false
   const newHtml = `
-    <div class="widget-root ${isEmpty ? 'is-empty' : ''} ${showCard ? 'has-card-bg' : 'no-card-bg'}" id="widget-container" title="클릭하여 상세 정보 및 설정 열기">
+    <div class="widget-root ${isEmpty ? 'is-empty' : ''} ${showCard ? 'has-card-bg' : 'no-card-bg'}" id="widget-container" title="${t('widgetClickTitle')}">
       ${accountsHtml}
     </div>
   `
@@ -106,7 +111,6 @@ if (!(window as any).api) {
       verticalOffsetPx: 0,
       refreshIntervalSec: 60,
       alphaPercent: 85,
-      syncTaskbarColor: true,
       showWeeklyLimit: true,
       colorByUsage: true,
       showCardBackground: false

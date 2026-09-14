@@ -1,6 +1,7 @@
 import { parseUsageColor } from '../../common/time-utils.js'
 import type { AccountUsage, WidgetConfig } from '../../common/types.js'
 import { getAiBrand } from './ai-icons.js'
+import { t } from '../../common/i18n.js'
 
 export function renderTheme1c(account: AccountUsage, config: WidgetConfig): string {
   const isMono = config.iconStyle === 'monochrome'
@@ -17,7 +18,7 @@ export function renderTheme1c(account: AccountUsage, config: WidgetConfig): stri
 
   const primaryDisplay = config.showUsedPercent ? primaryUsed : primaryLeft
   const weeklyDisplay = config.showUsedPercent ? weeklyUsed : weeklyLeft
-  const unitLabel = config.showUsedPercent ? '소모' : '남음'
+  const unitLabel = config.showUsedPercent ? t('unitUsed') : t('unitLeft')
 
   // SVG 링 계산: 기본값(남은량 표시)은 네이티브 앱과 동일하게 잔여량만큼 차오름. 소모량 표시 시 사용한 비율만큼 차오름
   const outerR = 15.5
@@ -31,7 +32,7 @@ export function renderTheme1c(account: AccountUsage, config: WidgetConfig): stri
   const brand = getAiBrand(account.provider, account.name)
   const centerFill = isMono ? '#9CA3AF' : brand.brandColor
   const centerBg = 'transparent'
-  const tooltip = `${account.name} | 5시간: ${primaryDisplay}% ${unitLabel} (${primaryReset}) | 주간: ${weeklyDisplay}% ${unitLabel} (${weeklyReset})`
+  const tooltip = t('widgetTooltip', { name: account.name, p: primaryDisplay, pr: primaryReset, w: weeklyDisplay, wr: weeklyReset, unit: unitLabel })
 
   return `
     <div class="account-item" data-account-id="${account.id}" title="${tooltip}">

@@ -1,6 +1,7 @@
 import { parseUsageColor } from '../../common/time-utils.js'
 import type { AccountUsage, WidgetConfig } from '../../common/types.js'
 import { renderAiIcon } from './ai-icons.js'
+import { t } from '../../common/i18n.js'
 
 export function renderTheme1d(account: AccountUsage, config: WidgetConfig): string {
   const isMono = config.iconStyle === 'monochrome'
@@ -17,10 +18,10 @@ export function renderTheme1d(account: AccountUsage, config: WidgetConfig): stri
 
   const primaryDisplay = config.showUsedPercent ? primaryUsed : primaryLeft
   const weeklyDisplay = config.showUsedPercent ? weeklyUsed : weeklyLeft
-  const unitLabel = config.showUsedPercent ? '소모' : '남음'
+  const unitLabel = config.showUsedPercent ? t('unitUsed') : t('unitLeft')
 
   const iconHtml = renderAiIcon(account.provider, account.name, config.iconStyle, 15)
-  const tooltip = `${account.name} | 5시간: ${primaryDisplay}% ${unitLabel} (${primaryReset}) | 주간: ${weeklyDisplay}% ${unitLabel} (${weeklyReset})`
+  const tooltip = t('widgetTooltip', { name: account.name, p: primaryDisplay, pr: primaryReset, w: weeklyDisplay, wr: weeklyReset, unit: unitLabel })
 
   return `
     <div class="account-item" data-account-id="${account.id}" title="${tooltip}">

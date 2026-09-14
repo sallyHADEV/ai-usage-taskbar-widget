@@ -11,9 +11,11 @@ import { calculatePopupPosition, calculateWidgetPosition, getTaskbarInfo } from 
 import { LocalAppDetector } from '../services/local-app-detector.js'
 import { TaskbarDocker } from './taskbar-docker.js'
 import { CodexAppServerClient } from '../services/codex-app-server-client.js'
-
+import { detectLang, setLang, t } from '../common/i18n.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+setLang(detectLang(app.getLocale()))
 
 function getPreloadPath(): string {
   const cjsPath = path.join(__dirname, 'preload.cjs')
@@ -45,6 +47,8 @@ const POPUP_WIDTH = 380
 const POPUP_HEIGHT = 440
 
 let isPopupLocked = false // 클릭으로 열었거나 팝업 조작 중일 때 자동 닫힘 방지
+let widgetManuallyHidden = false // 트레이 메뉴로 사용자가 직접 숨긴 경우 (전체화면 감지로 되살리지 않음)
+let widgetHiddenForFullscreen = false
 let popupHideTimer: NodeJS.Timeout | null = null
 
 function getAppState(): AppState {
@@ -351,25 +355,28 @@ function updateTrayMenu() {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: '위젯 표시/숨김',
+      label: t('trayToggleWidget'),
       click: () => {
         if (!widgetWindow) return
         if (widgetWindow.isVisible()) {
+          widgetManuallyHidden = true
           widgetWindow.hide()
           hidePopup(true)
         } else {
+          widgetManuallyHidden = false
+          widgetHiddenForFullscreen = false
           widgetWindow.show()
           updateWidgetBounds()
         }
       }
     },
     {
-      label: '상세 팝업 열기',
+      label: t('trayOpenPopup'),
       click: () => showPopup(true, true)
     },
     { type: 'separator' },
     {
-      label: '윈도우 시작 시 자동 실행',
+      label: t('trayAutoLaunch'),
       type: 'checkbox',
       checked: isAutoStart,
       click: (item) => {
@@ -380,13 +387,13 @@ function updateTrayMenu() {
       }
     },
     {
-      label: '지금 새로고침',
+      label: t('trayRefreshNow'),
       click: () => {
         quotaManager.refreshAll().then(() => broadcastState())
       }
     },
     {
-      label: 'Google 계정 추가...',
+      label: t('trayAddGoogle'),
       click: async () => {
         const res = await GoogleOAuthService.startLogin()
         if (res.success && res.email) {
@@ -410,7 +417,7 @@ function updateTrayMenu() {
     },
     { type: 'separator' },
     {
-      label: '종료',
+      label: t('trayQuit'),
       click: () => {
         app.quit()
       }
@@ -423,7 +430,7 @@ function updateTrayMenu() {
 function createTray() {
   const iconCanvas = getTrayIconImage()
   tray = new Tray(iconCanvas)
-  tray.setToolTip('AI 토큰 사용량 위젯')
+  tray.setToolTip(t('trayTooltip'))
 
   updateTrayMenu()
 
@@ -605,8 +612,20 @@ app.whenReady().then(() => {
 
   quotaManager.startPolling(accountStore.getConfig().refreshIntervalSec)
 
-  setInterval(() => {
-    if (widgetWindow && !widgetWindow.isDestroyed() && widgetWindow.isVisible()) {
+  setInterval(async () => {
+    if (!widgetWindow || widgetWindow.isDestroyed() || widgetManuallyHidden) return
+
+    const isFullscreen = await TaskbarDocker.checkForegroundFullscreen()
+
+    if (isFullscreen && widgetWindow.isVisible()) {
+      widgetHiddenForFullscreen = true
+      widgetWindow.hide()
+      hidePopup(true)
+    } else if (!isFullscreen && widgetHiddenForFullscreen) {
+      widgetHiddenForFullscreen = false
+      widgetWindow.show()
+      updateWidgetBounds()
+    } else if (widgetWindow.isVisible()) {
       widgetWindow.moveTop()
     }
   }, 2000)

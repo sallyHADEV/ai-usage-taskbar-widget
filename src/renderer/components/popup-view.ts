@@ -1,6 +1,7 @@
 import { parseUsageColor } from '../../common/time-utils.js'
 import type { AccountConfig, AppState, ThemeType, WidgetConfig } from '../../common/types.js'
 import { renderAiIcon } from './ai-icons.js'
+import { t } from '../../common/i18n.js'
 
 let activeTab: 'usage' | 'accounts' | 'settings' = 'usage'
 let isAddingCustom = false
@@ -24,14 +25,14 @@ export function renderPopupView(container: HTMLElement, state: AppState) {
       <!-- 헤더 -->
       <div class="popup-header">
         <div class="popup-title">
-          <span>AI 토큰 사용량</span>
-          <span class="popup-title-badge">${state.usages.length} 계정 활성</span>
+          <span>${t('popupTitle')}</span>
+          <span class="popup-title-badge">${t('accountsActive', { count: state.usages.length })}</span>
         </div>
         <div class="popup-actions">
-          <button class="icon-button ${state.isRefreshing ? 'refreshing' : ''}" id="btn-refresh" title="새로고침">
+          <button class="icon-button ${state.isRefreshing ? 'refreshing' : ''}" id="btn-refresh" title="${t('refresh')}">
             &#8635;
           </button>
-          <button class="icon-button" id="btn-close-popup" title="닫기">
+          <button class="icon-button" id="btn-close-popup" title="${t('close')}">
             &times;
           </button>
         </div>
@@ -39,9 +40,9 @@ export function renderPopupView(container: HTMLElement, state: AppState) {
 
       <!-- 탭 -->
       <div class="popup-tabs">
-        <div class="popup-tab ${activeTab === 'usage' ? 'active' : ''}" data-tab="usage">사용량 현황</div>
-        <div class="popup-tab ${activeTab === 'accounts' ? 'active' : ''}" data-tab="accounts">계정 관리</div>
-        <div class="popup-tab ${activeTab === 'settings' ? 'active' : ''}" data-tab="settings">위젯 설정</div>
+        <div class="popup-tab ${activeTab === 'usage' ? 'active' : ''}" data-tab="usage">${t('tabUsage')}</div>
+        <div class="popup-tab ${activeTab === 'accounts' ? 'active' : ''}" data-tab="accounts">${t('tabAccounts')}</div>
+        <div class="popup-tab ${activeTab === 'settings' ? 'active' : ''}" data-tab="settings">${t('tabSettings')}</div>
       </div>
 
       <!-- 본문 -->
@@ -68,8 +69,8 @@ function renderUsageTab(state: AppState): string {
   if (state.usages.length === 0) {
     return `
       <div style="text-align: center; padding: 40px 10px; color: var(--text-muted);">
-        <p>활성화된 계정이 없습니다.</p>
-        <p style="margin-top: 8px; font-size: 11px;">[계정 관리] 탭에서 감지된 로컬 계정을 추가하세요.</p>
+        <p>${t('noActiveAccounts')}</p>
+        <p style="margin-top: 8px; font-size: 11px;">${t('addAccountHint')}</p>
       </div>
     `
   }
@@ -101,7 +102,7 @@ function renderUsageTab(state: AppState): string {
 
     const modelsHtml = (displayedModels.length > 0)
       ? `
-        <div class="model-list-title">모델별 세부 쿼터</div>
+        <div class="model-list-title">${t('modelQuotaTitle')}</div>
         ${displayedModels.map(m => `
           <div class="model-item">
             <span class="model-name">${m.displayName}</span>
@@ -120,7 +121,7 @@ function renderUsageTab(state: AppState): string {
             ${iconHtml}
             <div>
               <div class="card-account-name">${u.name}</div>
-              <div class="card-account-email">${u.email || u.projectId || (u.status === 'error' ? u.errorMessage : '실시간 모니터링 중')}</div>
+              <div class="card-account-email">${u.email || u.projectId || (u.status === 'error' ? u.errorMessage : t('realtimeMonitoring'))}</div>
             </div>
           </div>
           <span class="card-badge ${u.status === 'error' ? 'error' : ''}">${u.tier || u.status}</span>
@@ -129,19 +130,19 @@ function renderUsageTab(state: AppState): string {
         <div class="card-quota-grid">
           <div class="quota-box">
             <div class="quota-box-title">
-              <span>5시간 세션 한도</span>
-              <span>사용량</span>
+              <span>${t('sessionLimit5h')}</span>
+              <span>${t('usageLabel')}</span>
             </div>
             <div class="quota-box-percent" style="color: ${primaryColor}">${primaryUsed}%</div>
-            <div class="quota-box-reset">리셋: <strong>${u.primaryQuota.resetCountdown}</strong> 남음</div>
+            <div class="quota-box-reset">${t('resetLabel', { time: `<strong>${u.primaryQuota.resetCountdown}</strong>` })}</div>
           </div>
           <div class="quota-box">
             <div class="quota-box-title">
-              <span>주간 누적 한도</span>
-              <span>사용량</span>
+              <span>${t('weeklyLimit')}</span>
+              <span>${t('usageLabel')}</span>
             </div>
             <div class="quota-box-percent" style="color: ${weeklyColor}">${weeklyUsed}%</div>
-            <div class="quota-box-reset">리셋: <strong>${u.weeklyQuota?.resetCountdown || '--'}</strong> 남음</div>
+            <div class="quota-box-reset">${t('resetLabel', { time: `<strong>${u.weeklyQuota?.resetCountdown || '--'}</strong>` })}</div>
           </div>
         </div>
 
@@ -162,13 +163,13 @@ function renderAccountsTab(state: AppState): string {
           ${renderAiIcon(acc.provider, acc.name, state.config.iconStyle, 20)}
           <div>
             <div style="font-weight: 600; font-size: 11px;">${acc.name}</div>
-            <div style="font-size: 9px; color: var(--text-dim);">${acc.tokens?.email || (acc.isLocalIde ? '로컬 IDE 무인증 연동' : acc.provider.toUpperCase())}</div>
+            <div style="font-size: 9px; color: var(--text-dim);">${acc.tokens?.email || (acc.isLocalIde ? t('localIdeNoAuth') : acc.provider.toUpperCase())}</div>
           </div>
         </div>
         <div style="display: flex; align-items: center; gap: 5px;">
-          <button class="btn-order btn-move-up" data-id="${acc.id}" title="위로 이동" ${isFirst ? 'disabled style="opacity: 0.25; cursor: default;"' : 'style="cursor: pointer;"'}>▲</button>
-          <button class="btn-order btn-move-down" data-id="${acc.id}" title="아래로 이동" ${isLast ? 'disabled style="opacity: 0.25; cursor: default;"' : 'style="cursor: pointer;"'}>▼</button>
-          <button class="btn-danger btn-delete-account" data-id="${acc.id}" title="계정 삭제">삭제</button>
+          <button class="btn-order btn-move-up" data-id="${acc.id}" title="${t('moveUp')}" ${isFirst ? 'disabled style="opacity: 0.25; cursor: default;"' : 'style="cursor: pointer;"'}>▲</button>
+          <button class="btn-order btn-move-down" data-id="${acc.id}" title="${t('moveDown')}" ${isLast ? 'disabled style="opacity: 0.25; cursor: default;"' : 'style="cursor: pointer;"'}>▼</button>
+          <button class="btn-danger btn-delete-account" data-id="${acc.id}" title="${t('deleteAccountTitle')}">${t('deleteAccountBtn')}</button>
         </div>
       </div>
     `
@@ -183,13 +184,13 @@ function renderAccountsTab(state: AppState): string {
           ${renderAiIcon(app.provider, app.name, state.config.iconStyle, 18)}
           <div>
             <div style="font-weight: 600; font-size: 11px; color: #fff;">${app.name}</div>
-            <div style="font-size: 9px; color: var(--text-muted);">${app.running ? '현재 프로세스 실행 중' : (app.installed ? '로컬 설치 감지됨' : '프리셋 준비됨')}</div>
+            <div style="font-size: 9px; color: var(--text-muted);">${app.running ? t('runningNow') : (app.installed ? t('localInstallDetected') : t('presetReady'))}</div>
           </div>
         </div>
         <div>
           ${isAdded
-            ? `<span style="color: #34d399; font-weight: 600; font-size: 10px; background: rgba(52, 211, 153, 0.12); padding: 3px 8px; border-radius: 4px;">✓ 추가됨</span>`
-            : `<button class="btn-primary btn-add-detected" data-app-id="${app.id}" style="padding: 3px 10px; font-size: 10px; background: #2563EB;">+ 위젯에 추가</button>`
+            ? `<span style="color: #34d399; font-weight: 600; font-size: 10px; background: rgba(52, 211, 153, 0.12); padding: 3px 8px; border-radius: 4px;">${t('added')}</span>`
+            : `<button class="btn-primary btn-add-detected" data-app-id="${app.id}" style="padding: 3px 10px; font-size: 10px; background: #2563EB;">${t('addToWidget')}</button>`
           }
         </div>
       </div>
@@ -199,8 +200,8 @@ function renderAccountsTab(state: AppState): string {
   const localDetectorHtml = `
     <div class="card" style="padding: 10px 12px; background: rgba(37, 99, 235, 0.08); border-color: rgba(37, 99, 235, 0.3);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-        <strong style="font-size: 11px; color: #60a5fa;">로컬 AI 앱 자동 감지 (원클릭 추가)</strong>
-        <button class="btn-secondary" id="btn-detect-apps" style="padding: 2px 8px; font-size: 10px;">다시 감지</button>
+        <strong style="font-size: 11px; color: #60a5fa;">${t('localDetectTitle')}</strong>
+        <button class="btn-secondary" id="btn-detect-apps" style="padding: 2px 8px; font-size: 10px;">${t('redetect')}</button>
       </div>
       <div id="local-apps-list" style="display: flex; flex-direction: column; gap: 2px;">
         ${detectedItemsHtml}
@@ -210,48 +211,48 @@ function renderAccountsTab(state: AppState): string {
 
   const customFormHtml = isAddingCustom ? `
     <div class="card" style="margin-top: 10px; padding: 12px; background: rgba(0,0,0,0.3);">
-      <div style="font-weight: 700; font-size: 12px; margin-bottom: 8px;">새 커스텀 계정 추가</div>
+      <div style="font-weight: 700; font-size: 12px; margin-bottom: 8px;">${t('addCustomAccountTitle')}</div>
       <div class="form-group">
-        <label class="form-label">계정 별칭</label>
+        <label class="form-label">${t('accountAlias')}</label>
         <input type="text" id="new-acc-name" value="Claude Work" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 6px; border-radius: 4px;" />
       </div>
       <div class="form-row">
         <div class="form-group" style="flex: 1;">
-          <label class="form-label">아이콘 글자</label>
+          <label class="form-label">${t('iconLetterLabel')}</label>
           <input type="text" id="new-acc-icon" value="C" maxlength="2" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 6px; border-radius: 4px;" />
         </div>
         <div class="form-group" style="flex: 1;">
-          <label class="form-label">브랜드 색상</label>
+          <label class="form-label">${t('brandColorLabel')}</label>
           <input type="color" id="new-acc-color" value="#D97757" style="background: none; border: none; height: 30px; cursor: pointer; width: 100%;" />
         </div>
       </div>
       <div class="form-row">
         <div class="form-group" style="flex: 1;">
-          <label class="form-label">5H 사용량 (%)</label>
+          <label class="form-label">${t('usage5h')}</label>
           <input type="number" id="new-acc-5h" min="0" max="100" value="45" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 6px; border-radius: 4px;" />
         </div>
         <div class="form-group" style="flex: 1;">
-          <label class="form-label">주간 사용량 (%)</label>
+          <label class="form-label">${t('usageWeekly')}</label>
           <input type="number" id="new-acc-wk" min="0" max="100" value="28" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 6px; border-radius: 4px;" />
         </div>
       </div>
       <div style="display: flex; gap: 8px; margin-top: 8px;">
-        <button class="btn-primary" id="btn-save-custom" style="flex: 1;">저장</button>
-        <button class="btn-secondary" id="btn-cancel-custom">취소</button>
+        <button class="btn-primary" id="btn-save-custom" style="flex: 1;">${t('save')}</button>
+        <button class="btn-secondary" id="btn-cancel-custom">${t('cancel')}</button>
       </div>
     </div>
   ` : `
     <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 10px;">
       <div style="display: flex; gap: 8px;">
         <button class="btn-primary" id="btn-add-google" style="flex: 1;">
-          <span>+ Google OAuth 로그인</span>
+          <span>${t('addGoogleOAuth')}</span>
         </button>
         <button class="btn-secondary" id="btn-show-custom-form">
-          + 직접 입력
+          ${t('addManually')}
         </button>
       </div>
       <button class="btn-secondary" id="btn-reset-defaults" style="font-size: 11px; padding: 6px; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.15);">
-        🔄 기본 3대 AI (Antigravity · Claude · Codex) 전체 초기화/복원
+        ${t('resetDefaults')}
       </button>
     </div>
   `
@@ -260,7 +261,7 @@ function renderAccountsTab(state: AppState): string {
     <div style="display: flex; flex-direction: column; gap: 8px;">
       ${localDetectorHtml}
       <div style="font-size: 11px; color: var(--text-muted); margin: 4px 0 2px 0;">
-        체크된 계정이 작업표시줄 위젯에 실시간 표시됩니다.
+        ${t('checkedAccountsHint')}
       </div>
       ${accountListHtml}
       ${customFormHtml}
@@ -275,24 +276,24 @@ function renderSettingsTab(state: AppState): string {
     <div style="display: flex; flex-direction: column; gap: 14px;">
       <!-- 테마 선택 -->
       <div class="form-group">
-        <label class="form-label">위젯 테마 디자인</label>
+        <label class="form-label">${t('widgetTheme')}</label>
         <div class="form-row">
-          <button class="theme-button ${cfg.theme === '1a' ? 'active' : ''}" data-theme="1a">1a. 바 게이지</button>
-          <button class="theme-button ${cfg.theme === '1b' ? 'active' : ''}" data-theme="1b">1b. 세그먼트</button>
-          <button class="theme-button ${cfg.theme === '1c' ? 'active' : ''}" data-theme="1c">1c. 이중 링</button>
-          <button class="theme-button ${cfg.theme === '1d' ? 'active' : ''}" data-theme="1d">1d. 초압축</button>
+          <button class="theme-button ${cfg.theme === '1a' ? 'active' : ''}" data-theme="1a">${t('theme1a')}</button>
+          <button class="theme-button ${cfg.theme === '1b' ? 'active' : ''}" data-theme="1b">${t('theme1b')}</button>
+          <button class="theme-button ${cfg.theme === '1c' ? 'active' : ''}" data-theme="1c">${t('theme1c')}</button>
+          <button class="theme-button ${cfg.theme === '1d' ? 'active' : ''}" data-theme="1d">${t('theme1d')}</button>
         </div>
       </div>
 
       <!-- 아이콘 스타일 -->
       <div class="form-group">
-        <label class="form-label">AI 아이콘 스타일</label>
+        <label class="form-label">${t('iconStyleLabel')}</label>
         <div class="form-row">
           <button class="theme-button ${cfg.iconStyle === 'color' ? 'active' : ''}" id="btn-icon-color">
-            오리지널 컬러
+            ${t('iconColor')}
           </button>
           <button class="theme-button ${cfg.iconStyle === 'monochrome' ? 'active' : ''}" id="btn-icon-mono">
-            채도 없음 (모노크롬)
+            ${t('iconMono')}
           </button>
         </div>
       </div>
@@ -300,7 +301,7 @@ function renderSettingsTab(state: AppState): string {
       <!-- 윈도우 시작 시 자동 실행 -->
       <div class="form-group">
         <label class="form-label switch-container" for="chk-open-at-login">
-          <span>윈도우 시작 시 자동 실행</span>
+          <span>${t('launchAtLogin')}</span>
           <div class="md-switch">
             <input type="checkbox" id="chk-open-at-login" ${cfg.openAtLogin ? 'checked' : ''} />
             <div class="md-switch-track">
@@ -313,7 +314,7 @@ function renderSettingsTab(state: AppState): string {
       <!-- 사용량에 따른 색상 변화 -->
       <div class="form-group">
         <label class="form-label switch-container" for="chk-color-usage">
-          <span>사용량 임계값 색상 변화 (녹색 &rarr; 주황 &rarr; 빨강)</span>
+          <span>${t('colorByUsageLabel')}</span>
           <div class="md-switch">
             <input type="checkbox" id="chk-color-usage" ${cfg.colorByUsage ? 'checked' : ''} />
             <div class="md-switch-track">
@@ -326,7 +327,7 @@ function renderSettingsTab(state: AppState): string {
       <!-- 배경 카드 표시 여부 -->
       <div class="form-group">
         <label class="form-label switch-container" for="chk-show-card-bg">
-          <span>위젯 배경 카드 표시 (해제 시 완전 투명 일체화)</span>
+          <span>${t('showCardBg')}</span>
           <div class="md-switch">
             <input type="checkbox" id="chk-show-card-bg" ${cfg.showCardBackground ? 'checked' : ''} />
             <div class="md-switch-track">
@@ -339,7 +340,7 @@ function renderSettingsTab(state: AppState): string {
       <!-- 작업표시줄 바 표시 방식: 남은량 vs 소모량 -->
       <div class="form-group">
         <label class="form-label switch-container" for="chk-show-used-percent">
-          <span>작업표시줄 바 표시 방식 (소모량 %로 표시)</span>
+          <span>${t('showUsedPercentLabel')}</span>
           <div class="md-switch">
             <input type="checkbox" id="chk-show-used-percent" ${cfg.showUsedPercent ? 'checked' : ''} />
             <div class="md-switch-track">
@@ -351,13 +352,13 @@ function renderSettingsTab(state: AppState): string {
 
       <!-- 배치 모드 -->
       <div class="form-group">
-        <label class="form-label">위젯 배치 위치</label>
+        <label class="form-label">${t('placementLabel')}</label>
         <div class="form-row">
           <button class="theme-button ${cfg.placementMode !== 'floating' ? 'active' : ''}" id="btn-place-docked">
-            작업표시줄 오버레이 (권장)
+            ${t('placementDocked')}
           </button>
           <button class="theme-button ${cfg.placementMode === 'floating' ? 'active' : ''}" id="btn-place-floating">
-            작업 표시줄 바로 위
+            ${t('placementFloating')}
           </button>
         </div>
       </div>
@@ -366,9 +367,9 @@ function renderSettingsTab(state: AppState): string {
       <div class="form-group" id="group-always-on-top" style="${cfg.placementMode === 'floating' ? '' : 'display: none;'}">
         <label class="form-label switch-container" for="chk-always-on-top">
           <div>
-            <span>항상 위에 표시</span>
+            <span>${t('alwaysOnTopLabel')}</span>
             <div style="font-size: 9px; color: var(--text-muted); font-weight: 400;">
-              다른 전체 화면 및 일반 창보다 항상 위에 떠 있도록 고정합니다
+              ${t('alwaysOnTopDesc')}
             </div>
           </div>
           <div class="md-switch">
@@ -382,13 +383,13 @@ function renderSettingsTab(state: AppState): string {
 
       <!-- 위치 및 정렬 -->
       <div class="form-group">
-        <label class="form-label">위젯 위치 정렬</label>
+        <label class="form-label">${t('alignmentLabel')}</label>
         <div class="form-row">
           <button class="theme-button ${cfg.alignment === 'right' ? 'active' : ''}" id="btn-align-right">
-            ${cfg.placementMode === 'floating' ? '우측 정렬 (화면 끝)' : '우측 정렬 (트레이 좌측)'}
+            ${cfg.placementMode === 'floating' ? t('alignRightFloating') : t('alignRightDocked')}
           </button>
           <button class="theme-button ${cfg.alignment === 'left' ? 'active' : ''}" id="btn-align-left">
-            ${cfg.placementMode === 'floating' ? '좌측 정렬 (화면 끝)' : '좌측 정렬 (시작버튼 우측)'}
+            ${cfg.placementMode === 'floating' ? t('alignLeftFloating') : t('alignLeftDocked')}
           </button>
         </div>
       </div>
@@ -396,7 +397,7 @@ function renderSettingsTab(state: AppState): string {
       <!-- 거리 오프셋 -->
       <div class="form-group">
         <div class="form-label">
-          <span>위치 오프셋 간격</span>
+          <span>${t('offsetLabel')}</span>
           <span id="label-offset">${cfg.offsetPx}px</span>
         </div>
         <input type="range" class="range-slider" id="slider-offset" min="0" max="350" value="${cfg.offsetPx}" />
@@ -405,7 +406,7 @@ function renderSettingsTab(state: AppState): string {
       <!-- 투명도 알파 -->
       <div class="form-group">
         <div class="form-label">
-          <span>작업표시줄 배경 투명도</span>
+          <span>${t('alphaLabel')}</span>
           <span id="label-alpha">${cfg.alphaPercent}%</span>
         </div>
         <input type="range" class="range-slider" id="slider-alpha" min="10" max="100" value="${cfg.alphaPercent}" />
@@ -413,13 +414,13 @@ function renderSettingsTab(state: AppState): string {
 
       <!-- 업데이트 주기 -->
       <div class="form-group">
-        <label class="form-label">데이터 갱신 주기</label>
+        <label class="form-label">${t('refreshIntervalLabel')}</label>
         <select id="sel-interval" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 6px; border-radius: 4px;">
-          <option value="15" ${cfg.refreshIntervalSec === 15 ? 'selected' : ''}>15초</option>
-          <option value="30" ${cfg.refreshIntervalSec === 30 ? 'selected' : ''}>30초</option>
-          <option value="60" ${cfg.refreshIntervalSec === 60 ? 'selected' : ''}>1분 (기본)</option>
-          <option value="120" ${cfg.refreshIntervalSec === 120 ? 'selected' : ''}>2분</option>
-          <option value="300" ${cfg.refreshIntervalSec === 300 ? 'selected' : ''}>5분</option>
+          <option value="15" ${cfg.refreshIntervalSec === 15 ? 'selected' : ''}>${t('interval15')}</option>
+          <option value="30" ${cfg.refreshIntervalSec === 30 ? 'selected' : ''}>${t('interval30')}</option>
+          <option value="60" ${cfg.refreshIntervalSec === 60 ? 'selected' : ''}>${t('interval60')}</option>
+          <option value="120" ${cfg.refreshIntervalSec === 120 ? 'selected' : ''}>${t('interval120')}</option>
+          <option value="300" ${cfg.refreshIntervalSec === 300 ? 'selected' : ''}>${t('interval300')}</option>
         </select>
       </div>
     </div>
@@ -470,7 +471,7 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
   container.querySelectorAll('.btn-delete-account').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       const id = (e.target as HTMLElement).getAttribute('data-id')
-      if (id && confirm('이 계정을 위젯에서 제거하시겠습니까? (로컬 앱 감지에서 언제든 다시 추가할 수 있습니다)')) {
+      if (id && confirm(t('confirmDeleteAccount'))) {
         window.api.removeAccount(id)
       }
     })
@@ -509,7 +510,7 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
 
   // 기본 계정 전체 초기화/복원 버튼
   container.querySelector('#btn-reset-defaults')?.addEventListener('click', () => {
-    if (confirm('기본 3대 AI (Antigravity · Claude · Codex) 프리셋으로 복원하시겠습니까?')) {
+    if (confirm(t('confirmResetDefaults'))) {
       window.api.resetDefaultAccounts()
     }
   })
@@ -517,7 +518,7 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
   container.querySelector('#btn-detect-apps')?.addEventListener('click', async () => {
     const listEl = container.querySelector('#local-apps-list')
     if (listEl) {
-      listEl.innerHTML = '<div style="color: #60a5fa; padding: 6px 0; font-size: 11px;">로컬 프로세스 및 CLI 설치 경로 실시간 탐색 중...</div>'
+      listEl.innerHTML = `<div style="color: #60a5fa; padding: 6px 0; font-size: 11px;">${t('detectingApps')}</div>`
     }
     const apps = await window.api.detectLocalApps()
     if (apps && apps.length > 0) {
@@ -530,7 +531,7 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
   container.querySelector('#btn-add-google')?.addEventListener('click', async () => {
     const res = await window.api.addGoogleAccount()
     if (!res.success && res.error) {
-      alert(`로그인 실패: ${res.error}`)
+      alert(t('loginFailedAlert', { error: res.error }))
     }
   })
 

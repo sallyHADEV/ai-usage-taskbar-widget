@@ -1,6 +1,7 @@
 import { parseUsageColor } from '../../common/time-utils.js'
 import type { AccountUsage, WidgetConfig } from '../../common/types.js'
 import { renderAiIcon } from './ai-icons.js'
+import { t } from '../../common/i18n.js'
 
 function renderSegments(percent: number, activeColor: string, totalSegments = 10): string {
   const activeCount = Math.round((percent / 100) * totalSegments)
@@ -37,13 +38,13 @@ export function renderTheme1b(account: AccountUsage, config: WidgetConfig): stri
 
   const primaryDisplay = config.showUsedPercent ? primaryUsed : primaryLeft
   const weeklyDisplay = config.showUsedPercent ? weeklyUsed : weeklyLeft
-  const unitLabel = config.showUsedPercent ? '소모' : '남음'
+  const unitLabel = config.showUsedPercent ? t('unitUsed') : t('unitLeft')
 
   const iconHtml = renderAiIcon(account.provider, account.name, config.iconStyle, 18)
   const showWeekly = config.showWeeklyLimit !== false && !!account.weeklyQuota
   const tooltip = showWeekly
-    ? `${account.name} | 5시간: ${primaryDisplay}% ${unitLabel} (${primaryReset}) | 주간: ${weeklyDisplay}% ${unitLabel} (${weeklyReset})`
-    : `${account.name} | ${primaryDisplay}% ${unitLabel} (${primaryReset})`
+    ? t('widgetTooltip', { name: account.name, p: primaryDisplay, pr: primaryReset, w: weeklyDisplay, wr: weeklyReset, unit: unitLabel })
+    : t('widgetTooltipNoWeekly', { name: account.name, p: primaryDisplay, pr: primaryReset, unit: unitLabel })
 
   return `
     <div class="account-item" data-account-id="${account.id}" title="${tooltip}">

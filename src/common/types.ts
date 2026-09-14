@@ -67,7 +67,6 @@ export interface WidgetConfig {
   verticalOffsetPx: number // 작업표시줄 상하 미세조정 (기본 0px)
   refreshIntervalSec: number // 갱신 주기 (기본 60초)
   alphaPercent: number // 투명도 (기본 20% -> 0.8 알파 or 투명 배경)
-  syncTaskbarColor: boolean // 윈도우 작업표시줄 색상/아크릴 동기화
   showWeeklyLimit: boolean
   colorByUsage: boolean // 사용량에 따른 색상 변화 (안전:그린 -> 주의:오렌지 -> 위험:레드)
   showUsedPercent?: boolean // true: 소모량(%) 표시, false/미설정: 남은량(%) 표시 (작업표시줄 바)

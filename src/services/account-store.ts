@@ -12,7 +12,6 @@ const DEFAULT_CONFIG: WidgetConfig = {
   verticalOffsetPx: 0,
   refreshIntervalSec: 60,
   alphaPercent: 85,
-  syncTaskbarColor: true,
   showWeeklyLimit: true,
   colorByUsage: true,
   showCardBackground: true,
