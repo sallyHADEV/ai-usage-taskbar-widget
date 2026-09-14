@@ -91,6 +91,35 @@ namespace FluentFlyoutDocker
             return hwnd;
         }
 
+        // 현재 포그라운드 창이 모니터 전체를 덮는 전체화면(테두리 없음/전체화면 독점)인지 판별
+        static bool IsForegroundFullscreen()
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return false;
+
+            var classNameBuf = new System.Text.StringBuilder(256);
+            GetClassName(fg, classNameBuf, classNameBuf.Capacity);
+            string className = classNameBuf.ToString();
+            // 바탕화면/탐색기/작업표시줄 자체는 전체화면으로 취급하지 않음
+            if (className == "Progman" || className == "WorkerW" || className == "Shell_TrayWnd" || className == "Shell_SecondaryTrayWnd")
+            {
+                return false;
+            }
+
+            RECT winRect;
+            if (!GetWindowRect(fg, out winRect)) return false;
+
+            IntPtr hMon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi = new MONITORINFO();
+            mi.cbSize = (uint)Marshal.SizeOf(typeof(MONITORINFO));
+            if (!GetMonitorInfo(hMon, ref mi)) return false;
+
+            return winRect.Left <= mi.rcMonitor.Left
+                && winRect.Top <= mi.rcMonitor.Top
+                && winRect.Right >= mi.rcMonitor.Right
+                && winRect.Bottom >= mi.rcMonitor.Bottom;
+        }
+
         static int RunAction(string[] args)
         {
             if (args.Length < 1) return 1;
@@ -192,47 +221,31 @@ namespace FluentFlyoutDocker
             }
             else if (action == "isfgfullscreen")
             {
-                // 현재 포그라운드 창이 모니터 전체를 덮는 전체화면(테두리 없음/전체화면 독점)인지 판별
-                IntPtr fg = GetForegroundWindow();
-                if (fg == IntPtr.Zero)
-                {
-                    Console.WriteLine("0");
-                    return 0;
-                }
-
-                var classNameBuf = new System.Text.StringBuilder(256);
-                GetClassName(fg, classNameBuf, classNameBuf.Capacity);
-                string className = classNameBuf.ToString();
-                // 바탕화면/탐색기/작업표시줄 자체는 전체화면으로 취급하지 않음
-                if (className == "Progman" || className == "WorkerW" || className == "Shell_TrayWnd" || className == "Shell_SecondaryTrayWnd")
-                {
-                    Console.WriteLine("0");
-                    return 0;
-                }
-
-                RECT winRect;
-                if (!GetWindowRect(fg, out winRect))
-                {
-                    Console.WriteLine("0");
-                    return 0;
-                }
-
-                IntPtr hMon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
-                MONITORINFO mi = new MONITORINFO();
-                mi.cbSize = (uint)Marshal.SizeOf(typeof(MONITORINFO));
-                if (!GetMonitorInfo(hMon, ref mi))
-                {
-                    Console.WriteLine("0");
-                    return 0;
-                }
-
-                bool isFullscreen = winRect.Left <= mi.rcMonitor.Left
-                    && winRect.Top <= mi.rcMonitor.Top
-                    && winRect.Right >= mi.rcMonitor.Right
-                    && winRect.Bottom >= mi.rcMonitor.Bottom;
-
-                Console.WriteLine(isFullscreen ? "1" : "0");
+                Console.WriteLine(IsForegroundFullscreen() ? "1" : "0");
                 return 0;
+            }
+            else if (action == "fswatch")
+            {
+                // 새 프로세스를 매번 띄우지 않고 하나의 상주 프로세스가 폴링하며 상태가 바뀔 때만 stdout에 보고
+                // (Electron에서 짧은 주기로 반복 spawn하면 .NET 프로세스 기동 비용 때문에 커서 busy 현상 유발)
+                int interval = 1000;
+                if (args.Length >= 2) int.TryParse(args[1], out interval);
+                if (interval < 200) interval = 200;
+
+                bool lastState = false;
+                bool first = true;
+                while (true)
+                {
+                    bool current = IsForegroundFullscreen();
+                    if (first || current != lastState)
+                    {
+                        Console.WriteLine(current ? "1" : "0");
+                        Console.Out.Flush();
+                        lastState = current;
+                        first = false;
+                    }
+                    Thread.Sleep(interval);
+                }
             }
             else if (action == "gettaskbar")
             {

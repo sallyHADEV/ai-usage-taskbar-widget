@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export class TaskbarDocker {
   private static dockerExePath: string | null = null
   private static stayTopProcess: ChildProcess | null = null
+  private static fsWatchProcess: ChildProcess | null = null
 
   public static getDockerPath(): string {
     if (this.dockerExePath && fs.existsSync(this.dockerExePath)) return this.dockerExePath
@@ -90,26 +91,47 @@ export class TaskbarDocker {
   }
 
   /**
-   * 현재 포그라운드 창이 모니터 전체를 덮는 전체화면 상태인지 확인 (게임/영상 전체화면 시 위젯 자동 숨김용)
+   * 전체화면(게임/영상) 감지를 위한 상주 워처 프로세스 1개만 기동 (짧은 주기로 매번 새 프로세스를
+   * spawn하면 .NET 프로세스 기동 비용 때문에 시스템 전역에 커서 busy 현상이 생겨 상주 방식으로 변경)
+   * 상태가 바뀔 때만 stdout에 "1"/"0" 한 줄이 오므로 그때만 콜백 호출
    */
-  public static checkForegroundFullscreen(): Promise<boolean> {
-    return new Promise((resolve) => {
-      const exe = this.getDockerPath()
-      if (!fs.existsSync(exe)) {
-        resolve(false)
-        return
-      }
+  public static startFullscreenWatcher(onChange: (isFullscreen: boolean) => void): void {
+    this.stopFullscreenWatcher()
 
+    const exe = this.getDockerPath()
+    if (!fs.existsSync(exe)) {
+      console.warn('[TaskbarDocker] Docker executable not found for fswatch:', exe)
+      return
+    }
+
+    try {
+      this.fsWatchProcess = spawn(exe, ['fswatch', '1000'], { windowsHide: true })
+      let buffer = ''
+      this.fsWatchProcess.stdout?.on('data', (chunk) => {
+        buffer += chunk.toString()
+        const lines = buffer.split(/\r?\n/)
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          if (line === '1' || line === '0') {
+            onChange(line === '1')
+          }
+        }
+      })
+      this.fsWatchProcess.on('error', (err) => {
+        console.warn('[TaskbarDocker] fswatch process error:', err)
+      })
+    } catch (err) {
+      console.error('[TaskbarDocker] Failed to spawn fswatch:', err)
+    }
+  }
+
+  public static stopFullscreenWatcher(): void {
+    if (this.fsWatchProcess) {
       try {
-        const proc = spawn(exe, ['isfgfullscreen'], { windowsHide: true })
-        let output = ''
-        proc.stdout?.on('data', (chunk) => { output += chunk.toString() })
-        proc.on('error', () => resolve(false))
-        proc.on('close', () => resolve(output.trim() === '1'))
-      } catch {
-        resolve(false)
-      }
-    })
+        this.fsWatchProcess.kill()
+      } catch {}
+      this.fsWatchProcess = null
+    }
   }
 
   /**

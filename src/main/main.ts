@@ -612,10 +612,14 @@ app.whenReady().then(() => {
 
   quotaManager.startPolling(accountStore.getConfig().refreshIntervalSec)
 
-  setInterval(async () => {
-    if (!widgetWindow || widgetWindow.isDestroyed() || widgetManuallyHidden) return
+  setInterval(() => {
+    if (widgetWindow && !widgetWindow.isDestroyed() && widgetWindow.isVisible()) {
+      widgetWindow.moveTop()
+    }
+  }, 2000)
 
-    const isFullscreen = await TaskbarDocker.checkForegroundFullscreen()
+  TaskbarDocker.startFullscreenWatcher((isFullscreen) => {
+    if (!widgetWindow || widgetWindow.isDestroyed() || widgetManuallyHidden) return
 
     if (isFullscreen && widgetWindow.isVisible()) {
       widgetHiddenForFullscreen = true
@@ -625,10 +629,8 @@ app.whenReady().then(() => {
       widgetHiddenForFullscreen = false
       widgetWindow.show()
       updateWidgetBounds()
-    } else if (widgetWindow.isVisible()) {
-      widgetWindow.moveTop()
     }
-  }, 2000)
+  })
 
   // 디스플레이 해상도, 작업표시줄 크기 변화 또는 모니터 연결/해제 시 위젯 위치 재배치
   const onScreenChange = () => {
@@ -649,6 +651,7 @@ app.on('before-quit', () => {
     quotaManager.stopPolling()
   }
   TaskbarDocker.stopStayTop()
+  TaskbarDocker.stopFullscreenWatcher()
   CodexAppServerClient.close()
   if (tray) {
     try {
