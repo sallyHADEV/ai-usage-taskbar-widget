@@ -11,7 +11,7 @@
     "update-app": "npm run build && powershell -ExecutionPolicy Bypass -Command \"Copy-Item -Path dist,dist-electron,native,public,package.json -Destination dist-release\\win-unpacked\\resources\\app -Recurse -Force; Copy-Item -Path native,public -Destination dist-release\\win-unpacked -Recurse -Force\"",
     "start": "electron dist-electron/main.js",
     "dist": "npm run build && electron-builder --win --dir",
-    "dist:exe": "npm run build && electron-builder --win portable"
+    "dist:zip": "npm run build && electron-builder --win zip"
   },
   "keywords": [
     "ai",

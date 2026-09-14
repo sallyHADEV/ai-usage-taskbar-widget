@@ -81,7 +81,7 @@ npm start
 # Windows 무설치(디렉터리형) 배포 패키지 생성
 npm run dist
 
-# 포터블 단독 실행 파일 생성
-npm run dist:exe
+# 배포용 zip 압축 패키지 생성 (Releases에 올리는 형식)
+npm run dist:zip
 ```
 
