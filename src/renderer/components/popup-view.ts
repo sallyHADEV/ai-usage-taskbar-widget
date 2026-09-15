@@ -7,6 +7,12 @@ let activeTab: 'usage' | 'accounts' | 'settings' = 'usage'
 let isAddingCustom = false
 let isSliderDragging = false
 
+// 팝업이 실제로 열릴 때만 등장 애니메이션 재생 (설정 클릭 등 재렌더링 시 깜빡임 방지)
+let shouldPlayEnterAnimation = true
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) shouldPlayEnterAnimation = true
+})
+
 // 캐시된 감지 앱 목록
 let cachedDetectedApps: any[] = [
   { id: 'local-antigravity', name: 'Google Antigravity', provider: 'antigravity', installed: true, running: true, iconLetter: 'A', brandColor: '#2563EB' },
@@ -20,8 +26,11 @@ export function renderPopupView(container: HTMLElement, state: AppState) {
     return
   }
 
+  // 항목 선택 시 전체 DOM이 재작성되며 스크롤이 맨 위로 튀는 것을 방지하기 위해 위치 보존
+  const prevScrollTop = container.querySelector('.popup-body')?.scrollTop ?? 0
+
   container.innerHTML = `
-    <div class="popup-root">
+    <div class="popup-root ${shouldPlayEnterAnimation ? 'popup-enter' : ''}">
       <!-- 헤더 -->
       <div class="popup-header">
         <div class="popup-title">
@@ -53,6 +62,11 @@ export function renderPopupView(container: HTMLElement, state: AppState) {
   `
 
   bindPopupEvents(container, state)
+
+  const popupBody = container.querySelector('.popup-body')
+  if (popupBody) popupBody.scrollTop = prevScrollTop
+
+  shouldPlayEnterAnimation = false
 }
 
 function renderTabContent(state: AppState): string {
@@ -416,11 +430,11 @@ function renderSettingsTab(state: AppState): string {
       <div class="form-group">
         <label class="form-label">${t('refreshIntervalLabel')}</label>
         <select id="sel-interval" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 6px; border-radius: 4px;">
-          <option value="15" ${cfg.refreshIntervalSec === 15 ? 'selected' : ''}>${t('interval15')}</option>
-          <option value="30" ${cfg.refreshIntervalSec === 30 ? 'selected' : ''}>${t('interval30')}</option>
-          <option value="60" ${cfg.refreshIntervalSec === 60 ? 'selected' : ''}>${t('interval60')}</option>
-          <option value="120" ${cfg.refreshIntervalSec === 120 ? 'selected' : ''}>${t('interval120')}</option>
-          <option value="300" ${cfg.refreshIntervalSec === 300 ? 'selected' : ''}>${t('interval300')}</option>
+          <option value="15" style="color: #111;" ${cfg.refreshIntervalSec === 15 ? 'selected' : ''}>${t('interval15')}</option>
+          <option value="30" style="color: #111;" ${cfg.refreshIntervalSec === 30 ? 'selected' : ''}>${t('interval30')}</option>
+          <option value="60" style="color: #111;" ${cfg.refreshIntervalSec === 60 ? 'selected' : ''}>${t('interval60')}</option>
+          <option value="120" style="color: #111;" ${cfg.refreshIntervalSec === 120 ? 'selected' : ''}>${t('interval120')}</option>
+          <option value="300" style="color: #111;" ${cfg.refreshIntervalSec === 300 ? 'selected' : ''}>${t('interval300')}</option>
         </select>
       </div>
     </div>

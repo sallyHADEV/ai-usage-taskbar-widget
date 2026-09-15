@@ -233,19 +233,16 @@ if (!(window as any).api) {
 }
 
 async function init() {
-  const state = await window.api.getState()
-
+  // 클릭 리스너는 state를 필요로 하지 않으므로, 창이 화면에 보이자마자(getState
+  // IPC 왕복을 기다리기 전에) 먼저 붙여둔다. 개발 모드(Vite dev server)는 번들이
+  // 아니라 개별 모듈을 네트워크로 받아오는 방식이라 이 왕복이 느려질 수 있는데,
+  // 그 사이에 창은 이미 떠 있어서 클릭해도 반응이 없는 것처럼 보이는 문제를 줄인다.
   if (viewType === 'popup') {
     // ESC 키 입력 시 팝업 닫기
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         window.api.hidePopup()
       }
-    })
-
-    renderPopup(state)
-    window.api.onStateChange((nextState) => {
-      renderPopup(nextState)
     })
   } else {
     // 위젯 클릭/포인터 이벤트 시 팝업 토글 (중복 트리거 방지 디바운스 적용)
@@ -265,7 +262,16 @@ async function init() {
         triggerToggle(e)
       }
     })
+  }
 
+  const state = await window.api.getState()
+
+  if (viewType === 'popup') {
+    renderPopup(state)
+    window.api.onStateChange((nextState) => {
+      renderPopup(nextState)
+    })
+  } else {
     renderWidget(state)
     window.api.onStateChange((nextState) => {
       renderWidget(nextState)

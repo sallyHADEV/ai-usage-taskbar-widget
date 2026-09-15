@@ -516,25 +516,29 @@ function setupIpcHandlers() {
       }
     }
     accountStore.addAccount(newAcc)
-    quotaManager.refreshAll().then(() => broadcastState())
+    broadcastState()
+    quotaManager.refreshAll().finally(() => broadcastState())
     return getAppState()
   })
 
   ipcMain.handle(IPC_CHANNELS.RESTORE_DETECTED_APP, (_event, appData: any) => {
     accountStore.restoreDetectedAccount(appData)
-    quotaManager.refreshAll().then(() => broadcastState())
+    broadcastState()
+    quotaManager.refreshAll().finally(() => broadcastState())
     return getAppState()
   })
 
   ipcMain.handle(IPC_CHANNELS.RESET_DEFAULT_ACCOUNTS, () => {
     accountStore.resetToDefaultAccounts()
-    quotaManager.refreshAll().then(() => broadcastState())
+    broadcastState()
+    quotaManager.refreshAll().finally(() => broadcastState())
     return getAppState()
   })
 
   ipcMain.handle(IPC_CHANNELS.TOGGLE_ACCOUNT, (_event, id: string, enabled: boolean) => {
     accountStore.toggleAccount(id, enabled)
-    quotaManager.refreshAll().then(() => broadcastState())
+    broadcastState()
+    quotaManager.refreshAll().finally(() => broadcastState())
     return getAppState()
   })
 
