@@ -40,6 +40,7 @@ docs/superpowers/
 *.prompt
 
 # 로컬 개발/디버깅 임시 스크립트 및 덤프 데이터
+scratch/
 scripts/
 *.ps1
 *.dump
