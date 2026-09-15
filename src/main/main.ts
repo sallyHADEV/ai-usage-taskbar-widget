@@ -107,19 +107,25 @@ async function updateWidgetBounds() {
   if (!widgetWindow || widgetWindow.isDestroyed()) return
   const config = accountStore.getConfig()
   const isFloating = config.placementMode === 'floating'
-  const targetHeight = getWidgetTargetHeight(config)
 
   if (isFloating) {
-    TaskbarDocker.applyBounds(widgetWindow, config, currentWidgetWidth, currentWidgetHeight)
-  } else {
-    // 네이티브 작업표시줄 도킹 실행 (작업표시줄 전체 높이 전달)
-    const res = await TaskbarDocker.dockWindow(widgetWindow, config, currentWidgetWidth, targetHeight)
-    if (res.success) {
-      TaskbarDocker.startDockHealthCheck(widgetWindow, () => {
-        console.log('[Main] Explorer restart or dock lost detected, re-docking widget...')
-        updateWidgetBounds()
-      })
-    }
+    widgetWindow.setContentSize(currentWidgetWidth, FLOATING_WIDGET_HEIGHT, false)
+    TaskbarDocker.applyBounds(widgetWindow, config, currentWidgetWidth, FLOATING_WIDGET_HEIGHT)
+    return
+  }
+
+  const targetHeight = getWidgetTargetHeight(config)
+
+  // Chromium viewport까지 실제 dock 크기로 먼저 동기화
+  widgetWindow.setContentSize(currentWidgetWidth, targetHeight, false)
+
+  // 네이티브 작업표시줄 도킹 실행 (작업표시줄 전체 높이 전달)
+  const res = await TaskbarDocker.dockWindow(widgetWindow, config, currentWidgetWidth, targetHeight)
+  if (res.success) {
+    TaskbarDocker.startDockHealthCheck(widgetWindow, () => {
+      console.log('[Main] Explorer restart or dock lost detected, re-docking widget...')
+      updateWidgetBounds()
+    })
   }
 }
 
@@ -510,22 +516,23 @@ function setupIpcHandlers() {
     return getAppState()
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_CONFIG, async (_event, nextConfig: WidgetConfig) => {
+  ipcMain.handle(IPC_CHANNELS.UPDATE_CONFIG, async (_event, patch: Partial<WidgetConfig>) => {
     const prevConfig = accountStore.getConfig()
+    const nextConfig: WidgetConfig = { ...prevConfig, ...patch }
     accountStore.saveConfig(nextConfig)
 
     // 윈도우 시작 시 실행 설정 변경 시 적용
-    if (prevConfig.openAtLogin !== nextConfig.openAtLogin && nextConfig.openAtLogin !== undefined) {
-      applyAutoLaunch(nextConfig.openAtLogin)
+    if (patch.openAtLogin !== undefined && prevConfig.openAtLogin !== nextConfig.openAtLogin) {
+      applyAutoLaunch(Boolean(nextConfig.openAtLogin))
     }
 
     // 갱신 주기 변경 시 폴링 인터벌 동적 재적용
-    if (prevConfig.refreshIntervalSec !== nextConfig.refreshIntervalSec) {
+    if (patch.refreshIntervalSec !== undefined && prevConfig.refreshIntervalSec !== nextConfig.refreshIntervalSec) {
       quotaManager.startPolling(nextConfig.refreshIntervalSec, false)
     }
 
     // 모드 전환 감지 (docked <-> floating)
-    if (prevConfig.placementMode !== nextConfig.placementMode && widgetWindow && !widgetWindow.isDestroyed()) {
+    if (patch.placementMode !== undefined && prevConfig.placementMode !== nextConfig.placementMode && widgetWindow && !widgetWindow.isDestroyed()) {
       if (nextConfig.placementMode === 'floating') {
         currentWidgetHeight = FLOATING_WIDGET_HEIGHT
         TaskbarDocker.stopDockHealthCheck()

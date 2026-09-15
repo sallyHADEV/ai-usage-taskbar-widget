@@ -128,6 +128,57 @@ namespace FluentFlyoutDocker
         const uint SWP_SHOWWINDOW = 0x0040;
 
         static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        static readonly IntPtr HWND_TOP = IntPtr.Zero;
+
+        static int GetLeftAnchor(IntPtr taskbarHwnd)
+        {
+            IntPtr startHwnd = FindWindowEx(taskbarHwnd, IntPtr.Zero, "Start", null);
+            if (startHwnd == IntPtr.Zero)
+            {
+                startHwnd = FindWindow("Start", null);
+            }
+
+            if (startHwnd != IntPtr.Zero && IsWindow(startHwnd))
+            {
+                RECT r;
+                if (GetWindowRect(startHwnd, out r))
+                {
+                    POINT pt = new POINT();
+                    pt.X = r.Right;
+                    pt.Y = r.Top;
+                    if (ScreenToClient(taskbarHwnd, ref pt))
+                    {
+                        if (pt.X > 0) return pt.X;
+                    }
+                }
+            }
+
+            return 0;
+        }
+
+        static int GetRightAnchor(IntPtr taskbarHwnd, int taskbarClientWidth)
+        {
+            IntPtr trayHwnd = FindWindowEx(taskbarHwnd, IntPtr.Zero, "TrayNotifyWnd", null);
+            if (trayHwnd != IntPtr.Zero && IsWindow(trayHwnd))
+            {
+                RECT trayRect;
+                if (GetWindowRect(trayHwnd, out trayRect))
+                {
+                    POINT pt = new POINT();
+                    pt.X = trayRect.Left;
+                    pt.Y = trayRect.Top;
+                    if (ScreenToClient(taskbarHwnd, ref pt))
+                    {
+                        if (pt.X > 0 && pt.X <= taskbarClientWidth)
+                        {
+                            return pt.X;
+                        }
+                    }
+                }
+            }
+
+            return taskbarClientWidth;
+        }
 
         static IntPtr ParseHwnd(string s)
         {
@@ -319,50 +370,23 @@ namespace FluentFlyoutDocker
                 int widgetHostHeightPx = taskbarClientHeight;
                 int physOffset = (int)Math.Round(logicalOffset * scale);
 
-                // System Tray (TrayNotifyWnd) 탐색 및 Client 좌표 변환
-                int trayClientLeft = -1;
-                IntPtr trayHwnd = FindWindowEx(taskbarHwnd, IntPtr.Zero, "TrayNotifyWnd", null);
-                if (trayHwnd != IntPtr.Zero && IsWindow(trayHwnd))
-                {
-                    RECT trayRect;
-                    if (GetWindowRect(trayHwnd, out trayRect))
-                    {
-                        POINT pt = new POINT();
-                        pt.X = trayRect.Left;
-                        pt.Y = trayRect.Top;
-                        if (ScreenToClient(taskbarHwnd, ref pt))
-                        {
-                            trayClientLeft = pt.X;
-                        }
-                    }
-                }
-
                 // 위치 계산: 세로는 작업표시줄 전체를 덮도록 y = 0
                 int widgetY = 0;
 
                 int widgetX = 0;
                 if (align == "left")
                 {
-                    // 시작 버튼 및 위젯 영역 우측 (기본 64px * scale)
-                    int startArea = (int)Math.Round(64 * scale);
-                    widgetX = startArea + physOffset;
+                    int leftAnchor = GetLeftAnchor(taskbarHwnd);
+                    widgetX = leftAnchor + physOffset;
                 }
                 else // right 정렬
                 {
-                    if (trayClientLeft > 0)
-                    {
-                        // Tray 영역의 바로 좌측에 배치
-                        widgetX = trayClientLeft - physOffset - widgetWidthPx;
-                    }
-                    else
-                    {
-                        // 보조 모니터 등 Tray가 없는 경우 작업표시줄 우측 끝 기준 fallback
-                        widgetX = taskbarClientWidth - physOffset - widgetWidthPx;
-                    }
+                    int rightAnchor = GetRightAnchor(taskbarHwnd, taskbarClientWidth);
+                    widgetX = rightAnchor - physOffset - widgetWidthPx;
                 }
 
                 // 작업표시줄 내부 영역 클램핑
-                if (widgetX < 4) widgetX = 4;
+                if (widgetX < 0) widgetX = 0;
                 if (widgetX + widgetWidthPx > taskbarClientWidth) widgetX = taskbarClientWidth - widgetWidthPx;
 
                 // 1) Window Style 변환: WS_POPUP 제거, WS_CHILD 추가
@@ -370,14 +394,17 @@ namespace FluentFlyoutDocker
                 style = (style & ~WS_POPUP) | WS_CHILD;
                 SetWindowLong(childHwnd, GWL_STYLE, style);
 
+                // 2) Extended Style: ToolWindow 설정, WS_EX_NOACTIVATE 제거 (포커스/마우스 인터랙션 차단 방지)
                 int exStyle = GetWindowLong(childHwnd, GWL_EXSTYLE);
-                exStyle = (exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW;
+                exStyle |= WS_EX_TOOLWINDOW;
+                exStyle &= ~WS_EX_APPWINDOW;
+                exStyle &= ~WS_EX_NOACTIVATE;
                 SetWindowLong(childHwnd, GWL_EXSTYLE, exStyle);
 
-                // 2) SetParent 호출
+                // 3) SetParent 호출
                 SetParent(childHwnd, taskbarHwnd);
 
-                // 3) SetParent 검증 (GetParent 또는 GetAncestor로 실제 부모 확인)
+                // 4) SetParent 검증 (GetParent 또는 GetAncestor로 실제 부모 확인)
                 IntPtr currentParent = GetParent(childHwnd);
                 if (currentParent != taskbarHwnd)
                 {
@@ -391,9 +418,9 @@ namespace FluentFlyoutDocker
                     return 5;
                 }
 
-                // 4) Client 좌표계로 위치 및 크기 설정 (전체 높이 widgetHostHeightPx 및 y=0)
-                bool posOk = SetWindowPos(childHwnd, IntPtr.Zero, widgetX, widgetY, widgetWidthPx, widgetHostHeightPx,
-                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                // 5) Client 좌표계로 위치 및 크기 설정 (HWND_TOP 사용, SWP_NOZORDER 제거로 child Z-order 최상위 승격)
+                bool posOk = SetWindowPos(childHwnd, HWND_TOP, widgetX, widgetY, widgetWidthPx, widgetHostHeightPx,
+                    SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
                 if (!posOk)
                 {
@@ -448,6 +475,7 @@ namespace FluentFlyoutDocker
 
                 int exStyle = GetWindowLong(childHwnd, GWL_EXSTYLE);
                 exStyle &= ~WS_EX_TOOLWINDOW;
+                exStyle &= ~WS_EX_NOACTIVATE;
                 SetWindowLong(childHwnd, GWL_EXSTYLE, exStyle);
 
                 SetWindowPos(childHwnd, IntPtr.Zero, 0, 0, 0, 0,
