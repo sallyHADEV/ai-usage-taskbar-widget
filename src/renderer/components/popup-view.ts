@@ -421,6 +421,15 @@ function renderSettingsTab(state: AppState): string {
         <input type="range" class="range-slider" id="slider-offset" min="-150" max="350" value="${cfg.offsetPx}" />
       </div>
 
+      <!-- 세로 오프셋 -->
+      <div class="form-group">
+        <div class="form-label">
+          <span>${t('verticalOffsetLabel')}</span>
+          <span id="label-voffset">${cfg.verticalOffsetPx ?? 0}px</span>
+        </div>
+        <input type="range" class="range-slider" id="slider-voffset" min="-20" max="20" value="${cfg.verticalOffsetPx ?? 0}" />
+      </div>
+
       <!-- 투명도 알파 -->
       <div class="form-group">
         <div class="form-label">
@@ -645,39 +654,37 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
     window.api.updateConfig({ alignment: 'left' })
   })
 
-  // 오프셋 슬라이더 (조작 중 절대 꺼지지 않도록 잠금 + 디바운스 적용)
-  const sliderOffset = container.querySelector('#slider-offset') as HTMLInputElement
-  if (sliderOffset) {
-    sliderOffset.addEventListener('mousedown', () => {
-      isSliderDragging = true
-      window.api.lockPopup()
-    })
-    sliderOffset.addEventListener('touchstart', () => {
-      isSliderDragging = true
-      window.api.lockPopup()
-    })
+  // 가로/세로 오프셋 슬라이더 (조작 중 절대 꺼지지 않도록 잠금 + 디바운스 적용)
+  for (const [key, id] of [['offsetPx', 'offset'], ['verticalOffsetPx', 'voffset']] as const) {
+    const slider = container.querySelector(`#slider-${id}`) as HTMLInputElement
+    if (!slider) continue
 
-    sliderOffset.addEventListener('input', () => {
-      const val = parseInt(sliderOffset.value, 10)
-      const lbl = container.querySelector('#label-offset')
+    const onStart = () => {
+      isSliderDragging = true
+      window.api.lockPopup()
+    }
+    slider.addEventListener('mousedown', onStart)
+    slider.addEventListener('touchstart', onStart)
+
+    slider.addEventListener('input', () => {
+      const val = parseInt(slider.value, 10)
+      const lbl = container.querySelector(`#label-${id}`)
       if (lbl) lbl.textContent = `${val}px`
 
       // 메인 프로세스로 디바운스 전송 (위젯 실시간 이동 & 팝업 동기 추종)
       if (offsetUpdateTimeout) clearTimeout(offsetUpdateTimeout)
       offsetUpdateTimeout = setTimeout(() => {
-        window.api.updateConfig({ offsetPx: val })
+        window.api.updateConfig({ [key]: val })
       }, 50)
     })
 
-    const onFinishOffset = () => {
+    const onFinish = () => {
       isSliderDragging = false
-      const val = parseInt(sliderOffset.value, 10)
-      window.api.updateConfig({ offsetPx: val })
+      window.api.updateConfig({ [key]: parseInt(slider.value, 10) })
     }
-
-    sliderOffset.addEventListener('change', onFinishOffset)
-    sliderOffset.addEventListener('mouseup', onFinishOffset)
-    sliderOffset.addEventListener('touchend', onFinishOffset)
+    slider.addEventListener('change', onFinish)
+    slider.addEventListener('mouseup', onFinish)
+    slider.addEventListener('touchend', onFinish)
   }
 
   // 투명도 알파 슬라이더

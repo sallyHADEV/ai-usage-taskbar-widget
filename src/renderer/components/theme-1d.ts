@@ -29,8 +29,8 @@ export function renderTheme1d(account: AccountUsage, config: WidgetConfig): stri
   return `
     <div class="account-item" data-account-id="${account.id}" title="${tooltip}">
       <div class="theme-1d">
+        ${iconHtml}
         <div class="top-line">
-          ${iconHtml}
           <strong class="quota-val" style="color: ${primaryColor};">${primaryDisplay}%</strong>
           <span class="quota-time">${isWeeklyOnly ? `${primaryReset} (WK)` : primaryReset}</span>
         </div>

@@ -354,12 +354,12 @@ namespace FluentFlyoutDocker
                 int physVOffset = (int)Math.Round(logicalVOffset * scale);
 
                 // 위치 계산: 수학적 중앙은 Win11 작업표시줄의 시각적 중앙보다 위에 보이므로 DPI-aware bias 추가
-                const double TaskbarVerticalBiasDip = 6.0; // 시각적 중앙선에 맞춰 조정
+                const double TaskbarVerticalBiasDip = 8.0; // 시각적 중앙선에 맞춰 조정
                 int centerY = (taskbarClientHeight - widgetHeightPx) / 2;
                 int biasPx = (int)Math.Round(TaskbarVerticalBiasDip * scale);
-                int widgetY = centerY + biasPx + physVOffset;
                 int maxY = Math.Max(0, taskbarClientHeight - widgetHeightPx);
-                widgetY = Math.Max(0, Math.Min(widgetY, maxY));
+                // 기본 위치(중앙+bias)만 작업표시줄 안으로 제한하고, 사용자 세로 오프셋(설정 슬라이더)은 제한 없이 반영
+                int widgetY = Math.Max(0, Math.Min(centerY + biasPx, maxY)) + physVOffset;
 
                 int widgetX = 0;
                 if (align == "left")

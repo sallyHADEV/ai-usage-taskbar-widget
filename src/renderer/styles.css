@@ -406,12 +406,18 @@ body.is-widget-view #app {
   margin-left: 2px;
 }
 
-/* 1d 테마: 초압축 2행 스택 */
+/* 1d 테마: 초압축 2행 스택 (아이콘은 좌측 열에서 두 행 전체 기준 수직 중앙) */
 .theme-1d {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 4px;
+  align-items: center;
+  align-content: center;
   min-width: 80px;
+}
+
+.theme-1d:has(.sub-line) > .ai-brand-icon {
+  grid-row: span 2;
 }
 
 .theme-1d .top-line {
@@ -441,7 +447,6 @@ body.is-widget-view #app {
   justify-content: space-between;
   font-size: 9px;
   color: var(--text-muted);
-  padding-left: 19px;
   line-height: 1;
   margin-top: 2px;
 }
@@ -457,6 +462,7 @@ body.is-widget-view #app {
 }
 
 .theme-1d .stack-bar-track {
+  grid-column: 1 / -1;
   width: 100%;
   height: 2px;
   background: var(--bar-bg);
