@@ -8,9 +8,6 @@ namespace FluentFlyoutDocker
 {
     class Program
     {
-        [DllImport("user32.dll", EntryPoint = "FindWindowW", SetLastError = true, CharSet = CharSet.Unicode)]
-        static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
-
         [DllImport("user32.dll", EntryPoint = "FindWindowExW", SetLastError = true, CharSet = CharSet.Unicode)]
         static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
 
@@ -137,32 +134,6 @@ namespace FluentFlyoutDocker
 
         static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         static readonly IntPtr HWND_TOP = IntPtr.Zero;
-
-        static int GetLeftAnchor(IntPtr taskbarHwnd)
-        {
-            IntPtr startHwnd = FindWindowEx(taskbarHwnd, IntPtr.Zero, "Start", null);
-            if (startHwnd == IntPtr.Zero)
-            {
-                startHwnd = FindWindow("Start", null);
-            }
-
-            if (startHwnd != IntPtr.Zero && IsWindow(startHwnd))
-            {
-                RECT r;
-                if (GetWindowRect(startHwnd, out r))
-                {
-                    POINT pt = new POINT();
-                    pt.X = r.Right;
-                    pt.Y = r.Top;
-                    if (ScreenToClient(taskbarHwnd, ref pt))
-                    {
-                        if (pt.X > 0) return pt.X;
-                    }
-                }
-            }
-
-            return 0;
-        }
 
         static int GetRightAnchor(IntPtr taskbarHwnd, int taskbarClientWidth)
         {
@@ -382,14 +353,19 @@ namespace FluentFlyoutDocker
                 int physOffset = (int)Math.Round(logicalOffset * scale);
                 int physVOffset = (int)Math.Round(logicalVOffset * scale);
 
-                // 위치 계산: 세로는 작업표시줄 내부에서 HWND 자체를 수직 중앙 정렬
-                int widgetY = ((taskbarClientHeight - widgetHeightPx) / 2) + physVOffset;
+                // 위치 계산: 수학적 중앙은 Win11 작업표시줄의 시각적 중앙보다 위에 보이므로 DPI-aware bias 추가
+                const double TaskbarVerticalBiasDip = 6.0; // 시각적 중앙선에 맞춰 조정
+                int centerY = (taskbarClientHeight - widgetHeightPx) / 2;
+                int biasPx = (int)Math.Round(TaskbarVerticalBiasDip * scale);
+                int widgetY = centerY + biasPx + physVOffset;
+                int maxY = Math.Max(0, taskbarClientHeight - widgetHeightPx);
+                widgetY = Math.Max(0, Math.Min(widgetY, maxY));
 
                 int widgetX = 0;
                 if (align == "left")
                 {
-                    int leftAnchor = GetLeftAnchor(taskbarHwnd);
-                    widgetX = leftAnchor + physOffset;
+                    // taskbar client x=0 = 해당 모니터 작업표시줄의 왼쪽 끝 (Start 버튼 위치와 무관)
+                    widgetX = physOffset;
                 }
                 else // right 정렬
                 {
@@ -455,7 +431,8 @@ namespace FluentFlyoutDocker
                     origRect.Left, origRect.Top, origRect.Right - origRect.Left, origRect.Bottom - origRect.Top));
                 Console.WriteLine(string.Format("Electron HWND rect after docking = {0},{1} {2}x{3}",
                     afterRect.Left, afterRect.Top, afterRect.Right - afterRect.Left, afterRect.Bottom - afterRect.Top));
-                Console.WriteLine(string.Format("Widget client y={0} height={1}", widgetY, widgetHeightPx));
+                Console.WriteLine(string.Format("TaskbarHeight={0} WidgetHeight={1} CenterY={2} Bias={3} UserVOffset={4} FinalY={5} DPI={6}",
+                    taskbarClientHeight, widgetHeightPx, centerY, biasPx, physVOffset, widgetY, dpi));
                 Console.WriteLine(string.Format("Parent={0}", parentClassName));
                 Console.WriteLine(string.Format("DOCKED_OK taskbar:0x{0:X} widget:0x{1:X} client:{2},{3},{4},{5} screen:{6},{7},{8},{9} dpi:{10}",
                     taskbarHwnd.ToInt64(), childHwnd.ToInt64(), widgetX, widgetY, widgetWidthPx, widgetHeightPx,
@@ -495,54 +472,6 @@ namespace FluentFlyoutDocker
 
                 Console.WriteLine("UNDOCKED_OK");
                 return 0;
-            }
-
-            // ==========================================
-            // 3. CHECKDOCK: 1~2초 주기 경량 헬스체크
-            // 인자: checkdock <childHwnd> [expectedTaskbarHwnd]
-            // ==========================================
-            else if (action == "checkdock" && args.Length >= 2)
-            {
-                IntPtr childHwnd = ParseHwnd(args[1]);
-                if (!IsWindow(childHwnd))
-                {
-                    Console.WriteLine("INVALID_WINDOW");
-                    return 1;
-                }
-
-                IntPtr parentHwnd = GetParent(childHwnd);
-                if (parentHwnd == IntPtr.Zero || !IsWindow(parentHwnd))
-                {
-                    parentHwnd = GetAncestor(childHwnd, GA_PARENT);
-                }
-
-                if (parentHwnd == IntPtr.Zero || !IsWindow(parentHwnd))
-                {
-                    Console.WriteLine("NO_PARENT");
-                    return 2;
-                }
-
-                if (args.Length >= 3)
-                {
-                    IntPtr expectedHwnd = ParseHwnd(args[2]);
-                    if (expectedHwnd != IntPtr.Zero && parentHwnd != expectedHwnd)
-                    {
-                        Console.WriteLine("PARENT_MISMATCH");
-                        return 3;
-                    }
-                }
-
-                StringBuilder sb = new StringBuilder(64);
-                GetClassName(parentHwnd, sb, sb.Capacity);
-                string cls = sb.ToString();
-                if (cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
-                {
-                    Console.WriteLine("DOCK_HEALTHY");
-                    return 0;
-                }
-
-                Console.WriteLine("NOT_TASKBAR_PARENT");
-                return 4;
             }
 
             // ==========================================
@@ -625,39 +554,37 @@ namespace FluentFlyoutDocker
             }
 
             // ==========================================
-            // 7. CLICKWATCH: (도킹 모드 전용 네이티브 클릭 감지)
-            // 인자: clickwatch <childHwnd>
+            // 7. WATCH: (도킹 모드 전용 상주 워처) 클릭 감지 + 도킹 유실 감지를 단일 프로세스에서 수행
+            // 인자: watch <childHwnd> <expectedTaskbarHwnd>
+            // 출력: CLICK (반복), DOCK_LOST (1회 출력 후 종료)
             // ==========================================
-            else if (action == "clickwatch" && args.Length >= 2)
+            else if (action == "watch" && args.Length >= 3)
             {
                 IntPtr widget = ParseHwnd(args[1]);
-                if (!IsWindow(widget))
-                {
-                    Console.WriteLine("INVALID_WINDOW");
-                    return 1;
-                }
-
+                IntPtr taskbar = ParseHwnd(args[2]);
                 bool previousDown = false;
 
                 while (IsWindow(widget))
                 {
+                    if (!IsWindow(taskbar) || GetParent(widget) != taskbar)
+                    {
+                        Console.WriteLine("DOCK_LOST");
+                        Console.Out.Flush();
+                        return 0;
+                    }
+
                     bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 
                     // mouse-up 순간 감지
                     if (!down && previousDown)
                     {
                         POINT p;
-                        if (GetCursorPos(out p))
+                        RECT r;
+                        if (GetCursorPos(out p) && GetWindowRect(widget, out r)
+                            && p.X >= r.Left && p.X < r.Right && p.Y >= r.Top && p.Y < r.Bottom)
                         {
-                            RECT r;
-                            if (GetWindowRect(widget, out r))
-                            {
-                                if (p.X >= r.Left && p.X < r.Right && p.Y >= r.Top && p.Y < r.Bottom)
-                                {
-                                    Console.WriteLine("CLICK");
-                                    Console.Out.Flush();
-                                }
-                            }
+                            Console.WriteLine("CLICK");
+                            Console.Out.Flush();
                         }
                     }
 

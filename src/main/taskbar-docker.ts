@@ -25,8 +25,8 @@ export class TaskbarDocker {
   private static dockerExePath: string | null = null
   private static stayTopProcess: ChildProcess | null = null
   private static fsWatchProcess: ChildProcess | null = null
-  private static clickWatchProcess: ChildProcess | null = null
-  private static healthCheckTimer: NodeJS.Timeout | null = null
+  private static dockWatchProcess: ChildProcess | null = null
+  private static dockWatchKey = ''
   private static lastTaskbarHwnd: string | null = null
 
   public static getDockerPath(): string {
@@ -170,29 +170,6 @@ export class TaskbarDocker {
   }
 
   /**
-   * 도킹 상태 확인 (부모 HWND가 정상적으로 유지되고 있는지 체크)
-   */
-  public static async checkDockStatus(win: BrowserWindow): Promise<boolean> {
-    if (!win || win.isDestroyed()) return false
-
-    const exe = this.getDockerPath()
-    if (!fs.existsSync(exe)) return false
-
-    const hwnd = this.getHwnd(win)
-    const args = ['checkdock', hwnd]
-    if (this.lastTaskbarHwnd) {
-      args.push(this.lastTaskbarHwnd)
-    }
-
-    try {
-      const { stdout } = await execFileAsync(exe, args, { windowsHide: true })
-      return stdout.includes('DOCK_HEALTHY')
-    } catch {
-      return false
-    }
-  }
-
-  /**
    * 팝업 앵커링을 위한 위젯의 실제 화면 절대 좌표(GetWindowRect) 조회
    */
   public static async getWidgetScreenRect(
@@ -223,79 +200,61 @@ export class TaskbarDocker {
   }
 
   /**
-   * 도킹 헬스체크 시작 (Explorer 재시작 또는 창 분실 시 복구 콜백 호출)
+   * 도킹 모드 전용 상주 워처: 단일 TaskbarDock.exe watch 프로세스가 클릭과 도킹 유실을 stdout으로 통지
+   * (주기적 프로세스 생성은 Windows AppStarting 커서를 유발하므로 금지)
    */
-  public static startDockHealthCheck(win: BrowserWindow, onRepair: () => void): void {
-    this.stopDockHealthCheck()
-    this.healthCheckTimer = setInterval(async () => {
-      if (!win || win.isDestroyed()) {
-        this.stopDockHealthCheck()
-        return
-      }
+  public static startDockWatcher(win: BrowserWindow, onClick: () => void, onDockLost: () => void): void {
+    if (!win || win.isDestroyed() || !this.lastTaskbarHwnd) return this.stopDockWatcher()
 
-      const isHealthy = await this.checkDockStatus(win)
-      if (!isHealthy) {
-        console.warn('[TaskbarDocker] Dock health check failed. Triggering re-dock repair...')
-        onRepair()
-      }
-    }, 2000)
-  }
-
-  public static stopDockHealthCheck(): void {
-    if (this.healthCheckTimer) {
-      clearInterval(this.healthCheckTimer)
-      this.healthCheckTimer = null
-    }
-  }
-
-  /**
-   * 도킹 모드 전용: 네이티브 클릭 감지 워처 (Win32 child HWND 마우스 이벤트 브릿지)
-   */
-  public static startDockClickWatcher(win: BrowserWindow, onClick: () => void): void {
-    this.stopDockClickWatcher()
-    if (!win || win.isDestroyed()) return
+    // 같은 위젯/작업표시줄로 재도킹(크기 변경 등)이면 살아 있는 워처를 그대로 재사용
+    const hwnd = this.getHwnd(win)
+    const key = `${hwnd}:${this.lastTaskbarHwnd}`
+    if (this.dockWatchProcess && this.dockWatchProcess.exitCode === null && this.dockWatchKey === key) return
+    this.stopDockWatcher()
 
     const exe = this.getDockerPath()
     if (!fs.existsSync(exe)) return
 
-    const hwnd = this.getHwnd(win)
-    console.log(`[TaskbarDocker] Starting native dock click watcher for HWND ${hwnd}...`)
+    this.dockWatchKey = key
+    console.log(`[TaskbarDocker] Starting dock watcher for HWND ${hwnd} (taskbar ${this.lastTaskbarHwnd})...`)
 
     try {
-      this.clickWatchProcess = spawn(exe, ['clickwatch', hwnd], { windowsHide: true })
+      const proc = spawn(exe, ['watch', hwnd, this.lastTaskbarHwnd], { windowsHide: true })
+      this.dockWatchProcess = proc
       let buffer = ''
 
-      this.clickWatchProcess.stdout?.on('data', (chunk) => {
+      proc.stdout?.on('data', (chunk) => {
         buffer += chunk.toString()
         const lines = buffer.split(/\r?\n/)
         buffer = lines.pop() || ''
 
         for (const line of lines) {
-          if (line.trim() === 'CLICK') {
+          const msg = line.trim()
+          if (msg === 'CLICK') {
             console.log('[TaskbarDocker] Native click detected on docked HWND, toggling popup')
             onClick()
+          } else if (msg === 'DOCK_LOST' && this.dockWatchProcess === proc) {
+            console.warn('[TaskbarDocker] Dock lost. Triggering re-dock repair...')
+            this.dockWatchProcess = null
+            onDockLost()
           }
         }
       })
 
-      this.clickWatchProcess.on('error', (err) => {
-        console.warn('[TaskbarDocker] clickwatch process error:', err)
-      })
-
-      win.once('closed', () => {
-        this.stopDockClickWatcher()
+      proc.on('error', (err) => {
+        console.warn('[TaskbarDocker] watch process error:', err)
       })
     } catch (err) {
-      console.error('[TaskbarDocker] Failed to spawn clickwatch:', err)
+      console.error('[TaskbarDocker] Failed to spawn watch:', err)
     }
   }
 
-  public static stopDockClickWatcher(): void {
-    if (this.clickWatchProcess) {
+  public static stopDockWatcher(): void {
+    if (this.dockWatchProcess) {
       try {
-        this.clickWatchProcess.kill()
+        this.dockWatchProcess.kill()
       } catch {}
-      this.clickWatchProcess = null
+      this.dockWatchProcess = null
     }
   }
 

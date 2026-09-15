@@ -76,8 +76,7 @@ function applyWindowTopmost(config: WidgetConfig) {
   if (!widgetWindow || widgetWindow.isDestroyed()) return
 
   if (config.placementMode === 'floating') {
-    // 플로팅 모드는 C# staytop 프로세스 및 도킹 헬스체크를 중단하고 Electron의 네이티브 alwaysOnTop 제어
-    TaskbarDocker.stopDockHealthCheck()
+    // 플로팅 모드는 Electron의 네이티브 alwaysOnTop 제어
     const isAlwaysTop = config.alwaysOnTop !== false
     if (isAlwaysTop) {
       widgetWindow.setAlwaysOnTop(true, 'screen-saver', 9999)
@@ -95,7 +94,18 @@ function applyWindowTopmost(config: WidgetConfig) {
 
 const FLOATING_WIDGET_HEIGHT = 36
 
-async function updateWidgetBounds() {
+// 레이아웃(dock/undock/setBounds)은 동시 실행 시 서로의 HWND 상태를 덮어쓰므로 직렬 큐로 실행
+let layoutQueue: Promise<void> = Promise.resolve()
+let dockRepairPending = false
+
+function updateWidgetBounds(): Promise<void> {
+  layoutQueue = layoutQueue
+    .then(layoutWidget)
+    .catch((err) => console.error('[Main] Widget layout failed:', err))
+  return layoutQueue
+}
+
+async function layoutWidget() {
   if (!widgetWindow || widgetWindow.isDestroyed()) return
   const config = accountStore.getConfig()
   const isFloating = config.placementMode === 'floating'
@@ -104,8 +114,8 @@ async function updateWidgetBounds() {
   widgetWindow.setContentSize(currentWidgetWidth, currentWidgetHeight, false)
 
   if (isFloating) {
-    TaskbarDocker.stopDockHealthCheck()
-    TaskbarDocker.stopDockClickWatcher()
+    dockRepairPending = false
+    TaskbarDocker.stopDockWatcher()
     TaskbarDocker.applyBounds(widgetWindow, config, currentWidgetWidth, currentWidgetHeight)
     return
   }
@@ -113,14 +123,19 @@ async function updateWidgetBounds() {
   // 네이티브 작업표시줄 도킹 실행 (실제 위젯 높이 currentWidgetHeight 전달)
   const res = await TaskbarDocker.dockWindow(widgetWindow, config, currentWidgetWidth, currentWidgetHeight)
   if (res.success) {
-    TaskbarDocker.startDockHealthCheck(widgetWindow, () => {
-      console.log('[Main] Explorer restart or dock lost detected, re-docking widget...')
-      updateWidgetBounds()
-    })
-    // docked 모드 전용 네이티브 클릭 감지 워처 가동
-    TaskbarDocker.startDockClickWatcher(widgetWindow, () => {
-      togglePopup()
-    })
+    dockRepairPending = false
+    TaskbarDocker.startDockWatcher(
+      widgetWindow,
+      () => togglePopup(),
+      () => {
+        console.log('[Main] Explorer restart or dock lost detected, re-docking widget...')
+        dockRepairPending = true
+        updateWidgetBounds()
+      }
+    )
+  } else if (dockRepairPending) {
+    // Explorer 재시작 직후에는 작업표시줄이 아직 없을 수 있으므로 복구 중일 때만 재시도
+    setTimeout(() => updateWidgetBounds(), 3000)
   }
 }
 
@@ -529,8 +544,7 @@ function setupIpcHandlers() {
     if (patch.placementMode !== undefined && prevConfig.placementMode !== nextConfig.placementMode && widgetWindow && !widgetWindow.isDestroyed()) {
       if (nextConfig.placementMode === 'floating') {
         currentWidgetHeight = FLOATING_WIDGET_HEIGHT
-        TaskbarDocker.stopDockHealthCheck()
-        TaskbarDocker.stopDockClickWatcher()
+        TaskbarDocker.stopDockWatcher()
         await TaskbarDocker.undockWindow(widgetWindow)
       } else {
         TaskbarDocker.stopStayTop()
@@ -745,8 +759,7 @@ app.on('before-quit', () => {
   }
   TaskbarDocker.stopStayTop()
   TaskbarDocker.stopFullscreenWatcher()
-  TaskbarDocker.stopDockHealthCheck()
-  TaskbarDocker.stopDockClickWatcher()
+  TaskbarDocker.stopDockWatcher()
   if (widgetWindow && !widgetWindow.isDestroyed()) {
     const cfg = accountStore.getConfig()
     if (cfg.placementMode !== 'floating') {
