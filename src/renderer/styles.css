@@ -71,6 +71,9 @@ body.is-widget-view #app {
 
 /* 위젯 컨테이너 */
 .widget-root {
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: none;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -327,6 +330,8 @@ body.is-widget-view #app {
 
 /* 1c 테마: 이중 링 게이지 */
 .theme-1c {
+  flex: 0 0 auto;
+  white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -361,15 +366,27 @@ body.is-widget-view #app {
 }
 
 .theme-1c .data-col {
+  flex: 0 0 auto;
+  width: max-content;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
 .theme-1c .row {
+  flex: 0 0 auto;
+  width: max-content;
+  white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.theme-1c .percent,
+.theme-1c .tag,
+.theme-1c .reset {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .theme-1c .percent {

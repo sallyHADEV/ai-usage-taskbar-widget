@@ -95,36 +95,31 @@ function applyWindowTopmost(config: WidgetConfig) {
 
 const FLOATING_WIDGET_HEIGHT = 36
 
-function getWidgetTargetHeight(config: WidgetConfig): number {
-  if (config.placementMode === 'floating') {
-    return currentWidgetHeight || FLOATING_WIDGET_HEIGHT
-  }
-  const tb = getTaskbarInfo()
-  return tb.taskbarHeight || 48
-}
-
 async function updateWidgetBounds() {
   if (!widgetWindow || widgetWindow.isDestroyed()) return
   const config = accountStore.getConfig()
   const isFloating = config.placementMode === 'floating'
 
+  // Chromium viewport와 HWND 크기를 실제 위젯 크기로 동기화
+  widgetWindow.setContentSize(currentWidgetWidth, currentWidgetHeight, false)
+
   if (isFloating) {
-    widgetWindow.setContentSize(currentWidgetWidth, FLOATING_WIDGET_HEIGHT, false)
-    TaskbarDocker.applyBounds(widgetWindow, config, currentWidgetWidth, FLOATING_WIDGET_HEIGHT)
+    TaskbarDocker.stopDockHealthCheck()
+    TaskbarDocker.stopDockClickWatcher()
+    TaskbarDocker.applyBounds(widgetWindow, config, currentWidgetWidth, currentWidgetHeight)
     return
   }
 
-  const targetHeight = getWidgetTargetHeight(config)
-
-  // Chromium viewport까지 실제 dock 크기로 먼저 동기화
-  widgetWindow.setContentSize(currentWidgetWidth, targetHeight, false)
-
-  // 네이티브 작업표시줄 도킹 실행 (작업표시줄 전체 높이 전달)
-  const res = await TaskbarDocker.dockWindow(widgetWindow, config, currentWidgetWidth, targetHeight)
+  // 네이티브 작업표시줄 도킹 실행 (실제 위젯 높이 currentWidgetHeight 전달)
+  const res = await TaskbarDocker.dockWindow(widgetWindow, config, currentWidgetWidth, currentWidgetHeight)
   if (res.success) {
     TaskbarDocker.startDockHealthCheck(widgetWindow, () => {
       console.log('[Main] Explorer restart or dock lost detected, re-docking widget...')
       updateWidgetBounds()
+    })
+    // docked 모드 전용 네이티브 클릭 감지 워처 가동
+    TaskbarDocker.startDockClickWatcher(widgetWindow, () => {
+      togglePopup()
     })
   }
 }
@@ -132,16 +127,15 @@ async function updateWidgetBounds() {
 function createWidgetWindow() {
   const config = accountStore.getConfig()
   const isFloating = config.placementMode === 'floating'
-  const targetHeight = getWidgetTargetHeight(config)
-  const { x, y } = TaskbarDocker.calculatePosition(config, currentWidgetWidth, targetHeight)
+  const { x, y } = TaskbarDocker.calculatePosition(config, currentWidgetWidth, currentWidgetHeight)
 
-  console.log(`[Widget] Creating widget window at (${x}, ${y}) size ${currentWidgetWidth}x${targetHeight} mode=${config.placementMode || 'docked'}`)
+  console.log(`[Widget] Creating widget window at (${x}, ${y}) size ${currentWidgetWidth}x${currentWidgetHeight} mode=${config.placementMode || 'docked'}`)
 
   widgetWindow = new BrowserWindow({
     x,
     y,
     width: currentWidgetWidth,
-    height: targetHeight,
+    height: currentWidgetHeight,
     frame: false,
     transparent: true,
     alwaysOnTop: isFloating && (config.alwaysOnTop !== false),
@@ -536,6 +530,7 @@ function setupIpcHandlers() {
       if (nextConfig.placementMode === 'floating') {
         currentWidgetHeight = FLOATING_WIDGET_HEIGHT
         TaskbarDocker.stopDockHealthCheck()
+        TaskbarDocker.stopDockClickWatcher()
         await TaskbarDocker.undockWindow(widgetWindow)
       } else {
         TaskbarDocker.stopStayTop()
@@ -663,10 +658,7 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.RESIZE_WIDGET, async (_event, width: number, height: number) => {
     if (width > 0 && height > 0) {
       currentWidgetWidth = Math.round(width)
-      const config = accountStore.getConfig()
-      if (config.placementMode === 'floating') {
-        currentWidgetHeight = Math.round(height)
-      }
+      currentWidgetHeight = Math.round(height)
       await updateWidgetBounds()
     }
   })
@@ -754,6 +746,7 @@ app.on('before-quit', () => {
   TaskbarDocker.stopStayTop()
   TaskbarDocker.stopFullscreenWatcher()
   TaskbarDocker.stopDockHealthCheck()
+  TaskbarDocker.stopDockClickWatcher()
   if (widgetWindow && !widgetWindow.isDestroyed()) {
     const cfg = accountStore.getConfig()
     if (cfg.placementMode !== 'floating') {

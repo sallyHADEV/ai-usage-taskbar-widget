@@ -25,6 +25,7 @@ export class TaskbarDocker {
   private static dockerExePath: string | null = null
   private static stayTopProcess: ChildProcess | null = null
   private static fsWatchProcess: ChildProcess | null = null
+  private static clickWatchProcess: ChildProcess | null = null
   private static healthCheckTimer: NodeJS.Timeout | null = null
   private static lastTaskbarHwnd: string | null = null
 
@@ -244,6 +245,57 @@ export class TaskbarDocker {
     if (this.healthCheckTimer) {
       clearInterval(this.healthCheckTimer)
       this.healthCheckTimer = null
+    }
+  }
+
+  /**
+   * 도킹 모드 전용: 네이티브 클릭 감지 워처 (Win32 child HWND 마우스 이벤트 브릿지)
+   */
+  public static startDockClickWatcher(win: BrowserWindow, onClick: () => void): void {
+    this.stopDockClickWatcher()
+    if (!win || win.isDestroyed()) return
+
+    const exe = this.getDockerPath()
+    if (!fs.existsSync(exe)) return
+
+    const hwnd = this.getHwnd(win)
+    console.log(`[TaskbarDocker] Starting native dock click watcher for HWND ${hwnd}...`)
+
+    try {
+      this.clickWatchProcess = spawn(exe, ['clickwatch', hwnd], { windowsHide: true })
+      let buffer = ''
+
+      this.clickWatchProcess.stdout?.on('data', (chunk) => {
+        buffer += chunk.toString()
+        const lines = buffer.split(/\r?\n/)
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.trim() === 'CLICK') {
+            console.log('[TaskbarDocker] Native click detected on docked HWND, toggling popup')
+            onClick()
+          }
+        }
+      })
+
+      this.clickWatchProcess.on('error', (err) => {
+        console.warn('[TaskbarDocker] clickwatch process error:', err)
+      })
+
+      win.once('closed', () => {
+        this.stopDockClickWatcher()
+      })
+    } catch (err) {
+      console.error('[TaskbarDocker] Failed to spawn clickwatch:', err)
+    }
+  }
+
+  public static stopDockClickWatcher(): void {
+    if (this.clickWatchProcess) {
+      try {
+        this.clickWatchProcess.kill()
+      } catch {}
+      this.clickWatchProcess = null
     }
   }
 

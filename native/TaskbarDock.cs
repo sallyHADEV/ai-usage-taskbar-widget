@@ -47,6 +47,14 @@ namespace FluentFlyoutDocker
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
 
+        [DllImport("user32.dll")]
+        static extern bool GetCursorPos(out POINT lpPoint);
+
+        [DllImport("user32.dll")]
+        static extern short GetAsyncKeyState(int vKey);
+
+        const int VK_LBUTTON = 0x01;
+
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool IsWindow(IntPtr hWnd);
 
@@ -364,14 +372,18 @@ namespace FluentFlyoutDocker
                 int dpi = GetWindowDpi(taskbarHwnd);
                 double scale = dpi / 96.0;
 
-                // 너비: Electron이 생성한 physical width를 그대로 유지 (없으면 scale 계산 fallback)
-                int widgetWidthPx = existingNativeWidth > 0 ? existingNativeWidth : (int)Math.Round(logicalWidth * scale);
-                // 높이: 작업표시줄 전체 Client 높이를 위젯 Host HWND 높이로 설정
-                int widgetHostHeightPx = taskbarClientHeight;
-                int physOffset = (int)Math.Round(logicalOffset * scale);
+                // 너비 및 높이: Electron HWND의 실제 physical rect 읽기 (DPI 재계산 왜곡 방지)
+                int widgetWidthPx = origRect.Right - origRect.Left;
+                int widgetHeightPx = origRect.Bottom - origRect.Top;
 
-                // 위치 계산: 세로는 작업표시줄 전체를 덮도록 y = 0
-                int widgetY = 0;
+                if (widgetWidthPx <= 0) widgetWidthPx = (int)Math.Round(logicalWidth * scale);
+                if (widgetHeightPx <= 0) widgetHeightPx = (int)Math.Round(logicalHeight * scale);
+
+                int physOffset = (int)Math.Round(logicalOffset * scale);
+                int physVOffset = (int)Math.Round(logicalVOffset * scale);
+
+                // 위치 계산: 세로는 작업표시줄 내부에서 HWND 자체를 수직 중앙 정렬
+                int widgetY = ((taskbarClientHeight - widgetHeightPx) / 2) + physVOffset;
 
                 int widgetX = 0;
                 if (align == "left")
@@ -418,8 +430,8 @@ namespace FluentFlyoutDocker
                     return 5;
                 }
 
-                // 5) Client 좌표계로 위치 및 크기 설정 (HWND_TOP 사용, SWP_NOZORDER 제거로 child Z-order 최상위 승격)
-                bool posOk = SetWindowPos(childHwnd, HWND_TOP, widgetX, widgetY, widgetWidthPx, widgetHostHeightPx,
+                // 5) Client 좌표계로 위치 및 크기 설정 (HWND_TOP 사용, SWP_NOZORDER 제거로 child Z-order 최상위 승격, 높이는 widgetHeightPx)
+                bool posOk = SetWindowPos(childHwnd, HWND_TOP, widgetX, widgetY, widgetWidthPx, widgetHeightPx,
                     SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
                 if (!posOk)
@@ -443,10 +455,10 @@ namespace FluentFlyoutDocker
                     origRect.Left, origRect.Top, origRect.Right - origRect.Left, origRect.Bottom - origRect.Top));
                 Console.WriteLine(string.Format("Electron HWND rect after docking = {0},{1} {2}x{3}",
                     afterRect.Left, afterRect.Top, afterRect.Right - afterRect.Left, afterRect.Bottom - afterRect.Top));
-                Console.WriteLine(string.Format("Widget client y={0} height={1}", widgetY, widgetHostHeightPx));
+                Console.WriteLine(string.Format("Widget client y={0} height={1}", widgetY, widgetHeightPx));
                 Console.WriteLine(string.Format("Parent={0}", parentClassName));
                 Console.WriteLine(string.Format("DOCKED_OK taskbar:0x{0:X} widget:0x{1:X} client:{2},{3},{4},{5} screen:{6},{7},{8},{9} dpi:{10}",
-                    taskbarHwnd.ToInt64(), childHwnd.ToInt64(), widgetX, widgetY, widgetWidthPx, widgetHostHeightPx,
+                    taskbarHwnd.ToInt64(), childHwnd.ToInt64(), widgetX, widgetY, widgetWidthPx, widgetHeightPx,
                     afterRect.Left, afterRect.Top, afterRect.Right - afterRect.Left, afterRect.Bottom - afterRect.Top, dpi));
 
                 return 0;
@@ -610,6 +622,50 @@ namespace FluentFlyoutDocker
                     }
                     Thread.Sleep(interval);
                 }
+            }
+
+            // ==========================================
+            // 7. CLICKWATCH: (도킹 모드 전용 네이티브 클릭 감지)
+            // 인자: clickwatch <childHwnd>
+            // ==========================================
+            else if (action == "clickwatch" && args.Length >= 2)
+            {
+                IntPtr widget = ParseHwnd(args[1]);
+                if (!IsWindow(widget))
+                {
+                    Console.WriteLine("INVALID_WINDOW");
+                    return 1;
+                }
+
+                bool previousDown = false;
+
+                while (IsWindow(widget))
+                {
+                    bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+
+                    // mouse-up 순간 감지
+                    if (!down && previousDown)
+                    {
+                        POINT p;
+                        if (GetCursorPos(out p))
+                        {
+                            RECT r;
+                            if (GetWindowRect(widget, out r))
+                            {
+                                if (p.X >= r.Left && p.X < r.Right && p.Y >= r.Top && p.Y < r.Bottom)
+                                {
+                                    Console.WriteLine("CLICK");
+                                    Console.Out.Flush();
+                                }
+                            }
+                        }
+                    }
+
+                    previousDown = down;
+                    Thread.Sleep(16);
+                }
+
+                return 0;
             }
 
             return 3;
