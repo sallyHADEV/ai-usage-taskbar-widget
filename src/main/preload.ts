@@ -23,6 +23,12 @@ export const api = {
   detectLocalApps: (): Promise<any[]> => ipcRenderer.invoke(IPC_CHANNELS.DETECT_LOCAL_APPS),
   scheduleHidePopup: (delayMs?: number): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.SCHEDULE_HIDE_POPUP, delayMs),
   cancelHidePopup: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.CANCEL_HIDE_POPUP),
+  popupReady: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.POPUP_READY),
+  onPopupOpened: (callback: (state: AppState) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: AppState) => callback(state)
+    ipcRenderer.on(IPC_CHANNELS.POPUP_OPENED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.POPUP_OPENED, handler)
+  },
   onStateChange: (callback: (state: AppState) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, state: AppState) => callback(state)
     ipcRenderer.on(IPC_CHANNELS.STATE_CHANGED, handler)

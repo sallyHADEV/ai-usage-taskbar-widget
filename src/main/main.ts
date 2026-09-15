@@ -50,6 +50,7 @@ let isPopupLocked = false // 클릭으로 열었거나 팝업 조작 중일 때 
 let widgetManuallyHidden = false // 트레이 메뉴로 사용자가 직접 숨긴 경우 (전체화면 감지로 되살리지 않음)
 let widgetHiddenForFullscreen = false
 let popupHideTimer: NodeJS.Timeout | null = null
+let popupRevealTimer: NodeJS.Timeout | null = null
 
 function getAppState(): AppState {
   return {
@@ -244,15 +245,32 @@ function showPopup(focus = false, lock = false) {
     // 팝업이 닫혀 있다가 새로 열릴 때만 위젯의 현재 위치를 기준으로 좌표를 결정하여 띄움 (뜬 후에는 자리 고정)
     positionPopupWindow()
 
+    // 숨긴 창을 다시 show하면 숨기기 직전의 마지막 프레임(완전히 열린 팝업)이 잠깐 보인 뒤
+    // 등장 애니메이션이 처음부터 재생되어 두 번 열리는 것처럼 보임. 투명하게 띄워두고
+    // 렌더러가 애니메이션 첫 프레임을 그렸다고 알려오면(POPUP_READY) 불투명으로 전환한다.
+    popupWindow.setOpacity(0)
+    if (popupRevealTimer) clearTimeout(popupRevealTimer)
+    popupRevealTimer = setTimeout(revealPopup, 300) // 렌더러 응답이 없어도 팝업이 안 보이는 일은 없도록
+
     if (focus) {
       popupWindow.show()
       popupWindow.focus()
     } else {
       popupWindow.showInactive()
     }
-    popupWindow.webContents.send(IPC_CHANNELS.STATE_CHANGED, getAppState())
+    popupWindow.webContents.send(IPC_CHANNELS.POPUP_OPENED, getAppState())
   } else if (focus) {
     popupWindow.focus()
+  }
+}
+
+function revealPopup() {
+  if (popupRevealTimer) {
+    clearTimeout(popupRevealTimer)
+    popupRevealTimer = null
+  }
+  if (popupWindow && !popupWindow.isDestroyed()) {
+    popupWindow.setOpacity(1)
   }
 }
 
@@ -597,6 +615,10 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.CANCEL_HIDE_POPUP, () => {
     cancelHidePopup()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.POPUP_READY, () => {
+    revealPopup()
   })
 }
 

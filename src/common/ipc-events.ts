@@ -19,5 +19,7 @@ export const IPC_CHANNELS = {
   OPEN_SETTINGS: 'window:open-settings',
   DETECT_LOCAL_APPS: 'app:detect-local-apps',
   SCHEDULE_HIDE_POPUP: 'window:schedule-hide-popup',
-  CANCEL_HIDE_POPUP: 'window:cancel-hide-popup'
+  CANCEL_HIDE_POPUP: 'window:cancel-hide-popup',
+  POPUP_OPENED: 'popup:opened',
+  POPUP_READY: 'window:popup-ready'
 } as const
