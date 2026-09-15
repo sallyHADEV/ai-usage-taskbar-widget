@@ -293,6 +293,11 @@ namespace FluentFlyoutDocker
                     return 2;
                 }
 
+                // 도킹 전 Electron HWND의 실제 physical rect 획득 (DPI 재계산 왜곡 방지)
+                RECT origRect;
+                GetWindowRect(childHwnd, out origRect);
+                int existingNativeWidth = origRect.Right - origRect.Left;
+
                 // GetClientRect로 실제 Taskbar Client 크기 조회
                 RECT tbClientRect;
                 if (!GetClientRect(taskbarHwnd, out tbClientRect))
@@ -304,14 +309,15 @@ namespace FluentFlyoutDocker
                 int taskbarClientWidth = tbClientRect.Right - tbClientRect.Left;
                 int taskbarClientHeight = tbClientRect.Bottom - tbClientRect.Top;
 
-                // 작업표시줄 DPI 스케일 감지 및 DIP -> physical pixel 변환
+                // 작업표시줄 DPI 스케일 감지
                 int dpi = GetWindowDpi(taskbarHwnd);
                 double scale = dpi / 96.0;
 
-                int widgetWidthPx = (int)Math.Round(logicalWidth * scale);
-                int widgetHeightPx = (int)Math.Round(logicalHeight * scale);
+                // 너비: Electron이 생성한 physical width를 그대로 유지 (없으면 scale 계산 fallback)
+                int widgetWidthPx = existingNativeWidth > 0 ? existingNativeWidth : (int)Math.Round(logicalWidth * scale);
+                // 높이: 작업표시줄 전체 Client 높이를 위젯 Host HWND 높이로 설정
+                int widgetHostHeightPx = taskbarClientHeight;
                 int physOffset = (int)Math.Round(logicalOffset * scale);
-                int physVOffset = (int)Math.Round(logicalVOffset * scale);
 
                 // System Tray (TrayNotifyWnd) 탐색 및 Client 좌표 변환
                 int trayClientLeft = -1;
@@ -331,9 +337,8 @@ namespace FluentFlyoutDocker
                     }
                 }
 
-                // 위치 계산 (Taskbar Client 좌표계)
-                // y = (taskbarHeightPx - widgetHeightPx) / 2 로 세로 중앙 배치
-                int widgetY = ((taskbarClientHeight - widgetHeightPx) / 2) + physVOffset;
+                // 위치 계산: 세로는 작업표시줄 전체를 덮도록 y = 0
+                int widgetY = 0;
 
                 int widgetX = 0;
                 if (align == "left")
@@ -360,20 +365,19 @@ namespace FluentFlyoutDocker
                 if (widgetX < 4) widgetX = 4;
                 if (widgetX + widgetWidthPx > taskbarClientWidth) widgetX = taskbarClientWidth - widgetWidthPx;
 
-                // 1) SetParent 호출
-                SetParent(childHwnd, taskbarHwnd);
-
-                // 2) Window Style 변환: WS_POPUP 제거, WS_CHILD 추가
+                // 1) Window Style 변환: WS_POPUP 제거, WS_CHILD 추가
                 int style = GetWindowLong(childHwnd, GWL_STYLE);
                 style = (style & ~WS_POPUP) | WS_CHILD;
                 SetWindowLong(childHwnd, GWL_STYLE, style);
 
-                // 3) Extended Style: ToolWindow & NoActivate 적용 (작업표시줄 아이콘 방지 및 포커스 분실 방지)
                 int exStyle = GetWindowLong(childHwnd, GWL_EXSTYLE);
                 exStyle = (exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW;
                 SetWindowLong(childHwnd, GWL_EXSTYLE, exStyle);
 
-                // 4) SetParent 검증 (GetParent 또는 GetAncestor로 실제 부모 확인)
+                // 2) SetParent 호출
+                SetParent(childHwnd, taskbarHwnd);
+
+                // 3) SetParent 검증 (GetParent 또는 GetAncestor로 실제 부모 확인)
                 IntPtr currentParent = GetParent(childHwnd);
                 if (currentParent != taskbarHwnd)
                 {
@@ -387,8 +391,8 @@ namespace FluentFlyoutDocker
                     return 5;
                 }
 
-                // 5) Client 좌표계로 위치 및 크기 설정 (DPI 변환된 physical px 전달)
-                bool posOk = SetWindowPos(childHwnd, IntPtr.Zero, widgetX, widgetY, widgetWidthPx, widgetHeightPx,
+                // 4) Client 좌표계로 위치 및 크기 설정 (전체 높이 widgetHostHeightPx 및 y=0)
+                bool posOk = SetWindowPos(childHwnd, IntPtr.Zero, widgetX, widgetY, widgetWidthPx, widgetHostHeightPx,
                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
                 if (!posOk)
@@ -398,29 +402,25 @@ namespace FluentFlyoutDocker
                     return 6;
                 }
 
-                RECT screenRect;
-                GetWindowRect(childHwnd, out screenRect);
+                RECT afterRect;
+                GetWindowRect(childHwnd, out afterRect);
 
-                // 디버깅 로그 출력 (지정된 포맷 준수)
-                Console.WriteLine(string.Format("Taskbar DPI: {0}", dpi));
-                Console.WriteLine(string.Format("Scale: {0:0.##}", scale));
-                Console.WriteLine();
-                Console.WriteLine(string.Format("Taskbar client: {0} x {1}", taskbarClientWidth, taskbarClientHeight));
-                Console.WriteLine();
-                Console.WriteLine("Electron requested:");
-                Console.WriteLine(string.Format("{0} x {1} DIP", (int)logicalWidth, (int)logicalHeight));
-                Console.WriteLine();
-                Console.WriteLine("Native widget:");
-                Console.WriteLine(string.Format("{0} x {1} px", widgetWidthPx, widgetHeightPx));
-                Console.WriteLine();
-                Console.WriteLine("Final position:");
-                Console.WriteLine(string.Format("x={0}", widgetX));
-                Console.WriteLine(string.Format("y={0}", widgetY));
-                Console.WriteLine();
-                Console.WriteLine(string.Format("Parent: 0x{0:X}", currentParent.ToInt64()));
+                StringBuilder parentClassBuf = new StringBuilder(64);
+                GetClassName(currentParent, parentClassBuf, parentClassBuf.Capacity);
+                string parentClassName = parentClassBuf.ToString();
+
+                // 디버깅 로그 출력
+                Console.WriteLine(string.Format("Taskbar client = {0}x{1}", taskbarClientWidth, taskbarClientHeight));
+                Console.WriteLine(string.Format("taskbarDpi = {0}", dpi));
+                Console.WriteLine(string.Format("Electron HWND rect before docking = {0},{1} {2}x{3}",
+                    origRect.Left, origRect.Top, origRect.Right - origRect.Left, origRect.Bottom - origRect.Top));
+                Console.WriteLine(string.Format("Electron HWND rect after docking = {0},{1} {2}x{3}",
+                    afterRect.Left, afterRect.Top, afterRect.Right - afterRect.Left, afterRect.Bottom - afterRect.Top));
+                Console.WriteLine(string.Format("Widget client y={0} height={1}", widgetY, widgetHostHeightPx));
+                Console.WriteLine(string.Format("Parent={0}", parentClassName));
                 Console.WriteLine(string.Format("DOCKED_OK taskbar:0x{0:X} widget:0x{1:X} client:{2},{3},{4},{5} screen:{6},{7},{8},{9} dpi:{10}",
-                    taskbarHwnd.ToInt64(), childHwnd.ToInt64(), widgetX, widgetY, widgetWidthPx, widgetHeightPx,
-                    screenRect.Left, screenRect.Top, screenRect.Right - screenRect.Left, screenRect.Bottom - screenRect.Top, dpi));
+                    taskbarHwnd.ToInt64(), childHwnd.ToInt64(), widgetX, widgetY, widgetWidthPx, widgetHostHeightPx,
+                    afterRect.Left, afterRect.Top, afterRect.Right - afterRect.Left, afterRect.Bottom - afterRect.Top, dpi));
 
                 return 0;
             }

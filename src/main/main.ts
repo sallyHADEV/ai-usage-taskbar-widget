@@ -93,15 +93,27 @@ function applyWindowTopmost(config: WidgetConfig) {
   }
 }
 
+const FLOATING_WIDGET_HEIGHT = 36
+
+function getWidgetTargetHeight(config: WidgetConfig): number {
+  if (config.placementMode === 'floating') {
+    return currentWidgetHeight || FLOATING_WIDGET_HEIGHT
+  }
+  const tb = getTaskbarInfo()
+  return tb.taskbarHeight || 48
+}
+
 async function updateWidgetBounds() {
   if (!widgetWindow || widgetWindow.isDestroyed()) return
   const config = accountStore.getConfig()
+  const isFloating = config.placementMode === 'floating'
+  const targetHeight = getWidgetTargetHeight(config)
 
-  if (config.placementMode === 'floating') {
+  if (isFloating) {
     TaskbarDocker.applyBounds(widgetWindow, config, currentWidgetWidth, currentWidgetHeight)
   } else {
-    // 네이티브 작업표시줄 도킹 실행
-    const res = await TaskbarDocker.dockWindow(widgetWindow, config, currentWidgetWidth, currentWidgetHeight)
+    // 네이티브 작업표시줄 도킹 실행 (작업표시줄 전체 높이 전달)
+    const res = await TaskbarDocker.dockWindow(widgetWindow, config, currentWidgetWidth, targetHeight)
     if (res.success) {
       TaskbarDocker.startDockHealthCheck(widgetWindow, () => {
         console.log('[Main] Explorer restart or dock lost detected, re-docking widget...')
@@ -114,15 +126,16 @@ async function updateWidgetBounds() {
 function createWidgetWindow() {
   const config = accountStore.getConfig()
   const isFloating = config.placementMode === 'floating'
-  const { x, y } = TaskbarDocker.calculatePosition(config, currentWidgetWidth, currentWidgetHeight)
+  const targetHeight = getWidgetTargetHeight(config)
+  const { x, y } = TaskbarDocker.calculatePosition(config, currentWidgetWidth, targetHeight)
 
-  console.log(`[Widget] Creating widget window at (${x}, ${y}) size ${currentWidgetWidth}x${currentWidgetHeight} mode=${config.placementMode || 'docked'}`)
+  console.log(`[Widget] Creating widget window at (${x}, ${y}) size ${currentWidgetWidth}x${targetHeight} mode=${config.placementMode || 'docked'}`)
 
   widgetWindow = new BrowserWindow({
     x,
     y,
     width: currentWidgetWidth,
-    height: currentWidgetHeight,
+    height: targetHeight,
     frame: false,
     transparent: true,
     alwaysOnTop: isFloating && (config.alwaysOnTop !== false),
@@ -514,6 +527,7 @@ function setupIpcHandlers() {
     // 모드 전환 감지 (docked <-> floating)
     if (prevConfig.placementMode !== nextConfig.placementMode && widgetWindow && !widgetWindow.isDestroyed()) {
       if (nextConfig.placementMode === 'floating') {
+        currentWidgetHeight = FLOATING_WIDGET_HEIGHT
         TaskbarDocker.stopDockHealthCheck()
         await TaskbarDocker.undockWindow(widgetWindow)
       } else {
@@ -642,7 +656,10 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.RESIZE_WIDGET, async (_event, width: number, height: number) => {
     if (width > 0 && height > 0) {
       currentWidgetWidth = Math.round(width)
-      currentWidgetHeight = Math.round(height)
+      const config = accountStore.getConfig()
+      if (config.placementMode === 'floating') {
+        currentWidgetHeight = Math.round(height)
+      }
       await updateWidgetBounds()
     }
   })
