@@ -20,17 +20,22 @@ export function renderTheme1a(account: AccountUsage, config: WidgetConfig): stri
   const unitLabel = config.showUsedPercent ? t('unitUsed') : t('unitLeft')
 
   const iconHtml = renderAiIcon(account.provider, account.name, config.iconStyle, 18)
-  const showWeekly = config.showWeeklyLimit !== false && !!account.weeklyQuota
-  const tooltip = showWeekly
-    ? t('widgetTooltip', { name: account.name, p: primaryDisplay, pr: primaryReset, w: weeklyDisplay, wr: weeklyReset, unit: unitLabel })
-    : t('widgetTooltipNoWeekly', { name: account.name, p: primaryDisplay, pr: primaryReset, unit: unitLabel })
+  const isWeeklyOnly = !!account.isWeeklyOnly
+  const primaryLabel = isWeeklyOnly ? 'WK' : '5H'
+  const showWeekly = !isWeeklyOnly && config.showWeeklyLimit !== false && !!account.weeklyQuota
+
+  const tooltip = isWeeklyOnly
+    ? t('widgetTooltipWeeklyOnly', { name: account.name, w: primaryDisplay, wr: primaryReset, unit: unitLabel })
+    : (showWeekly
+      ? t('widgetTooltip', { name: account.name, p: primaryDisplay, pr: primaryReset, w: weeklyDisplay, wr: weeklyReset, unit: unitLabel })
+      : t('widgetTooltipNoWeekly', { name: account.name, p: primaryDisplay, pr: primaryReset, unit: unitLabel }))
 
   return `
     <div class="account-item" data-account-id="${account.id}" title="${tooltip}">
       ${iconHtml}
       <div class="theme-1a">
         <div class="row">
-          <span class="label">5H</span>
+          <span class="label">${primaryLabel}</span>
           <div class="progress-track">
             <div class="progress-fill" style="width: ${primaryDisplay}%; background-color: ${primaryColor};"></div>
           </div>

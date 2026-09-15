@@ -32,7 +32,10 @@ export function renderTheme1c(account: AccountUsage, config: WidgetConfig): stri
   const brand = getAiBrand(account.provider, account.name)
   const centerFill = isMono ? '#9CA3AF' : brand.brandColor
   const centerBg = 'transparent'
-  const tooltip = t('widgetTooltip', { name: account.name, p: primaryDisplay, pr: primaryReset, w: weeklyDisplay, wr: weeklyReset, unit: unitLabel })
+  const isWeeklyOnly = !!account.isWeeklyOnly
+  const tooltip = isWeeklyOnly
+    ? t('widgetTooltipWeeklyOnly', { name: account.name, w: primaryDisplay, wr: primaryReset, unit: unitLabel })
+    : t('widgetTooltip', { name: account.name, p: primaryDisplay, pr: primaryReset, w: weeklyDisplay, wr: weeklyReset, unit: unitLabel })
 
   return `
     <div class="account-item" data-account-id="${account.id}" title="${tooltip}">
@@ -41,12 +44,13 @@ export function renderTheme1c(account: AccountUsage, config: WidgetConfig): stri
           <svg class="ring-svg" viewBox="0 0 36 36">
             <!-- 배경 트랙 외곽/내부 -->
             <circle cx="18" cy="18" r="${outerR}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2.5" />
-            <circle cx="18" cy="18" r="${innerR}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2.5" />
+            ${!isWeeklyOnly ? `<circle cx="18" cy="18" r="${innerR}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2.5" />` : ''}
             <!-- 프로그레스 링 -->
             <circle cx="18" cy="18" r="${outerR}" fill="none" stroke="${primaryColor}" stroke-width="2.5"
               stroke-dasharray="${outerCircumference}" stroke-dashoffset="${outerOffset}" stroke-linecap="round" />
+            ${!isWeeklyOnly ? `
             <circle cx="18" cy="18" r="${innerR}" fill="none" stroke="${weeklyColor}" stroke-width="2.5"
-              stroke-dasharray="${innerCircumference}" stroke-dashoffset="${innerOffset}" stroke-linecap="round" />
+              stroke-dasharray="${innerCircumference}" stroke-dashoffset="${innerOffset}" stroke-linecap="round" />` : ''}
           </svg>
           <div class="ring-center-icon ${isMono ? 'monochrome' : ''}" style="background: ${centerBg}; color: ${centerFill}; box-shadow: none;">
             <span style="display: flex; align-items: center; justify-content: center; transform: scale(0.9);">
@@ -57,14 +61,15 @@ export function renderTheme1c(account: AccountUsage, config: WidgetConfig): stri
         <div class="data-col">
           <div class="row">
             <span class="percent" style="color: ${primaryColor};">${primaryDisplay}%</span>
-            <span class="tag">5H</span>
+            <span class="tag">${isWeeklyOnly ? 'WK' : '5H'}</span>
             <span class="reset">${primaryReset}</span>
           </div>
+          ${!isWeeklyOnly ? `
           <div class="row">
             <span class="percent" style="color: ${weeklyColor};">${weeklyDisplay}%</span>
             <span class="tag">WK</span>
             <span class="reset">${weeklyReset}</span>
-          </div>
+          </div>` : ''}
         </div>
       </div>
     </div>

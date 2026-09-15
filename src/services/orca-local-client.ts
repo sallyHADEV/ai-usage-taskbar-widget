@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { formatCountdown } from '../common/time-utils.js'
-import type { AccountConfig, AccountUsage } from '../common/types.js'
+import type { AccountConfig, AccountUsage, ModelQuotaDetail } from '../common/types.js'
 
 interface OrcaRuntimeMetadata {
   runtimeId?: string
@@ -177,6 +177,9 @@ export class OrcaLocalClient {
     const email = systemDefault?.email || undefined
     const plan = systemDefault?.workspaceLabel || 'Personal (Plus)'
 
+    const isPro = plan.toLowerCase().includes('pro') || codex.session == null || (typeof codex.session?.windowMinutes === 'number' && codex.session.windowMinutes >= 1440)
+    const isWeeklyOnly = isPro
+
     // 1. 5시간 세션 쿼터
     const sessionUsed = codex.session?.usedPercent ?? 0
     const sessionLeft = Math.max(0, 100 - sessionUsed)
@@ -187,40 +190,30 @@ export class OrcaLocalClient {
       : (sessionResetDesc || '--')
 
     // 2. 주간 쿼터
-    const weeklyUsed = codex.weekly?.usedPercent ?? 0
+    const weeklyUsed = codex.weekly?.usedPercent ?? (isWeeklyOnly ? sessionUsed : 0)
     const weeklyLeft = Math.max(0, 100 - weeklyUsed)
-    const weeklyResetMs = codex.weekly?.resetsAt
-    const weeklyResetDesc = codex.weekly?.resetDescription
+    const weeklyResetMs = codex.weekly?.resetsAt || (isWeeklyOnly ? sessionResetMs : undefined)
+    const weeklyResetDesc = codex.weekly?.resetDescription || (isWeeklyOnly ? sessionResetDesc : undefined)
     const weeklyCountdown = weeklyResetMs
       ? formatCountdown(new Date(weeklyResetMs).toISOString())
       : (weeklyResetDesc || '--')
 
-    return {
-      id: account.id,
-      name: account.name || 'Codex',
-      provider: 'codex',
-      iconLetter: 'X',
-      brandColor: '#6366F1',
-      email,
-      tier: `${plan} (Orca 직결)`,
-      status: 'ready',
-      primaryQuota: {
-        remainingFraction: sessionLeft / 100,
-        percentLeft: sessionLeft,
-        percentUsed: sessionUsed,
-        resetTime: sessionResetMs ? new Date(sessionResetMs).toISOString() : undefined,
-        resetCountdown: sessionCountdown,
-        isExhausted: sessionLeft <= 1
-      },
-      weeklyQuota: {
-        remainingFraction: weeklyLeft / 100,
-        percentLeft: weeklyLeft,
-        percentUsed: weeklyUsed,
-        resetTime: weeklyResetMs ? new Date(weeklyResetMs).toISOString() : undefined,
-        resetCountdown: weeklyCountdown,
-        isExhausted: weeklyLeft <= 1
-      },
-      models: [
+    const models: ModelQuotaDetail[] = []
+    if (isWeeklyOnly) {
+      models.push({
+        modelId: 'gpt-5.6-terra-weekly',
+        displayName: 'Codex (1주일)',
+        quota: {
+          remainingFraction: weeklyLeft / 100,
+          percentLeft: weeklyLeft,
+          percentUsed: weeklyUsed,
+          resetTime: weeklyResetMs ? new Date(weeklyResetMs).toISOString() : undefined,
+          resetCountdown: weeklyCountdown,
+          isExhausted: weeklyLeft <= 1
+        }
+      })
+    } else {
+      models.push(
         {
           modelId: 'gpt-5.6-terra',
           displayName: 'Codex (5시간)',
@@ -245,7 +238,36 @@ export class OrcaLocalClient {
             isExhausted: weeklyLeft <= 1
           }
         }
-      ],
+      )
+    }
+
+    return {
+      id: account.id,
+      name: account.name || 'Codex',
+      provider: 'codex',
+      iconLetter: 'X',
+      brandColor: '#6366F1',
+      email,
+      tier: `${plan} (Orca 직결)`,
+      status: 'ready',
+      isWeeklyOnly,
+      primaryQuota: {
+        remainingFraction: (isWeeklyOnly ? weeklyLeft : sessionLeft) / 100,
+        percentLeft: isWeeklyOnly ? weeklyLeft : sessionLeft,
+        percentUsed: isWeeklyOnly ? weeklyUsed : sessionUsed,
+        resetTime: (isWeeklyOnly ? weeklyResetMs : sessionResetMs) ? new Date(isWeeklyOnly ? weeklyResetMs! : sessionResetMs!).toISOString() : undefined,
+        resetCountdown: isWeeklyOnly ? weeklyCountdown : sessionCountdown,
+        isExhausted: (isWeeklyOnly ? weeklyLeft : sessionLeft) <= 1
+      },
+      weeklyQuota: {
+        remainingFraction: weeklyLeft / 100,
+        percentLeft: weeklyLeft,
+        percentUsed: weeklyUsed,
+        resetTime: weeklyResetMs ? new Date(weeklyResetMs).toISOString() : undefined,
+        resetCountdown: weeklyCountdown,
+        isExhausted: weeklyLeft <= 1
+      },
+      models,
       updatedAt: new Date().toISOString()
     }
   }

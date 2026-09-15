@@ -32,6 +32,7 @@ export interface AccountUsage {
   errorMessage?: string
   primaryQuota: QuotaInfo // 5시간 또는 기본 한도
   weeklyQuota?: QuotaInfo // 주간 한도
+  isWeeklyOnly?: boolean // ChatGPT Pro 등 5시간 세션 쿼터 없이 1주일 쿼터만 존재하는 계정 여부
   models?: ModelQuotaDetail[]
   updatedAt: string
 }
@@ -54,6 +55,7 @@ export interface AccountConfig {
     primaryReset: string
     weeklyPercent: number
     weeklyReset: string
+    isWeeklyOnly?: boolean
     iconLetter?: string
     brandColor?: string
   }

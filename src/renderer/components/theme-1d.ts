@@ -21,7 +21,10 @@ export function renderTheme1d(account: AccountUsage, config: WidgetConfig): stri
   const unitLabel = config.showUsedPercent ? t('unitUsed') : t('unitLeft')
 
   const iconHtml = renderAiIcon(account.provider, account.name, config.iconStyle, 15)
-  const tooltip = t('widgetTooltip', { name: account.name, p: primaryDisplay, pr: primaryReset, w: weeklyDisplay, wr: weeklyReset, unit: unitLabel })
+  const isWeeklyOnly = !!account.isWeeklyOnly
+  const tooltip = isWeeklyOnly
+    ? t('widgetTooltipWeeklyOnly', { name: account.name, w: primaryDisplay, wr: primaryReset, unit: unitLabel })
+    : t('widgetTooltip', { name: account.name, p: primaryDisplay, pr: primaryReset, w: weeklyDisplay, wr: weeklyReset, unit: unitLabel })
 
   return `
     <div class="account-item" data-account-id="${account.id}" title="${tooltip}">
@@ -29,12 +32,13 @@ export function renderTheme1d(account: AccountUsage, config: WidgetConfig): stri
         <div class="top-line">
           ${iconHtml}
           <strong class="quota-val" style="color: ${primaryColor};">${primaryDisplay}%</strong>
-          <span class="quota-time">${primaryReset}</span>
+          <span class="quota-time">${isWeeklyOnly ? `${primaryReset} (WK)` : primaryReset}</span>
         </div>
+        ${!isWeeklyOnly ? `
         <div class="sub-line">
           <span class="quota-val-sub" style="color: ${weeklyColor};">${weeklyDisplay}%</span>
           <span class="quota-time-sub">${weeklyReset}</span>
-        </div>
+        </div>` : ''}
         <div class="stack-bar-track">
           <div class="stack-bar-fill" style="width: ${primaryDisplay}%; background-color: ${primaryColor};"></div>
         </div>

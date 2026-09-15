@@ -159,6 +159,9 @@ export class CodexLocalClient {
       }
     }
 
+    const isPro = plan.toLowerCase().includes('pro')
+    const isWeeklyOnly = isPro
+
     const result: AccountUsage = {
       id: account.id,
       name: account.name || 'Codex CLI',
@@ -168,12 +171,13 @@ export class CodexLocalClient {
       email: email || undefined,
       tier: `${plan} (로컬 세션)`,
       status: 'ready',
+      isWeeklyOnly,
       primaryQuota: {
-        remainingFraction: (100 - sessionPercent) / 100,
-        percentLeft: 100 - sessionPercent,
-        percentUsed: sessionPercent,
-        resetCountdown,
-        isExhausted: sessionPercent >= 100
+        remainingFraction: (100 - (isWeeklyOnly ? weeklyPercent : sessionPercent)) / 100,
+        percentLeft: 100 - (isWeeklyOnly ? weeklyPercent : sessionPercent),
+        percentUsed: isWeeklyOnly ? weeklyPercent : sessionPercent,
+        resetCountdown: isWeeklyOnly ? '--' : resetCountdown,
+        isExhausted: (isWeeklyOnly ? weeklyPercent : sessionPercent) >= 100
       },
       weeklyQuota: {
         remainingFraction: (100 - weeklyPercent) / 100,
@@ -185,13 +189,13 @@ export class CodexLocalClient {
       models: [
         {
           modelId: latestModel,
-          displayName: latestModel,
+          displayName: isWeeklyOnly ? `${latestModel} (1주일)` : latestModel,
           quota: {
-            remainingFraction: (100 - sessionPercent) / 100,
-            percentLeft: 100 - sessionPercent,
-            percentUsed: sessionPercent,
-            resetCountdown,
-            isExhausted: sessionPercent >= 100
+            remainingFraction: (100 - (isWeeklyOnly ? weeklyPercent : sessionPercent)) / 100,
+            percentLeft: 100 - (isWeeklyOnly ? weeklyPercent : sessionPercent),
+            percentUsed: isWeeklyOnly ? weeklyPercent : sessionPercent,
+            resetCountdown: isWeeklyOnly ? '--' : resetCountdown,
+            isExhausted: (isWeeklyOnly ? weeklyPercent : sessionPercent) >= 100
           }
         }
       ],
