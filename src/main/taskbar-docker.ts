@@ -1,17 +1,32 @@
-import { spawn, type ChildProcess } from 'child_process'
+import { spawn, execFile, type ChildProcess } from 'child_process'
 import path from 'path'
 import fs from 'fs'
+import { promisify } from 'util'
 import { fileURLToPath } from 'url'
 import { app, screen, type BrowserWindow } from 'electron'
 import type { WidgetConfig } from '../common/types.js'
-import { calculateWidgetPosition, getTaskbarInfo } from './taskbar-position.js'
+import { calculateWidgetPosition } from './taskbar-position.js'
 
+const execFileAsync = promisify(execFile)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+export interface DockResult {
+  success: boolean
+  taskbarHwnd?: string
+  widgetHwnd?: string
+  clientRect?: { x: number; y: number; width: number; height: number }
+  screenRect?: { x: number; y: number; width: number; height: number }
+  dpi?: number
+  rawOutput?: string
+  error?: string
+}
 
 export class TaskbarDocker {
   private static dockerExePath: string | null = null
   private static stayTopProcess: ChildProcess | null = null
   private static fsWatchProcess: ChildProcess | null = null
+  private static healthCheckTimer: NodeJS.Timeout | null = null
+  private static lastTaskbarHwnd: string | null = null
 
   public static getDockerPath(): string {
     if (this.dockerExePath && fs.existsSync(this.dockerExePath)) return this.dockerExePath
@@ -47,11 +62,203 @@ export class TaskbarDocker {
   }
 
   /**
-   * 포커스를 잃어도 작업표시줄 뒤로 숨지 않도록 네이티브 HWND_TOPMOST & NOACTIVATE 상시 유지
+   * Windows 작업표시줄(Shell_TrayWnd 또는 Shell_SecondaryTrayWnd)의 child HWND로 위젯 도킹
    */
-  public static startStayTop(win: BrowserWindow): void {
+  public static async dockWindow(
+    win: BrowserWindow,
+    config: WidgetConfig,
+    width: number,
+    height: number
+  ): Promise<DockResult> {
+    if (!win || win.isDestroyed()) {
+      return { success: false, error: 'Window is destroyed or null' }
+    }
+
+    const exe = this.getDockerPath()
+    if (!fs.existsSync(exe)) {
+      console.warn('[TaskbarDocker] Docker executable not found:', exe)
+      return { success: false, error: 'Executable not found' }
+    }
+
+    const hwnd = this.getHwnd(win)
+    const align = config.alignment || 'right'
+    const offset = config.offsetPx ?? 12
+    const vOffset = config.verticalOffsetPx ?? 0
+
+    // 대상 모니터 영역 추출
+    const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay()
+    const mon = display.bounds
+    const monStr = `${mon.x},${mon.y},${mon.x + mon.width},${mon.y + mon.height}`
+
+    const args = [
+      'dock',
+      hwnd,
+      String(width),
+      String(height),
+      align,
+      String(offset),
+      String(vOffset),
+      monStr
+    ]
+
+    console.log(`[TaskbarDocker] Docking HWND ${hwnd} with args:`, args.join(' '))
+
+    try {
+      const { stdout } = await execFileAsync(exe, args, { windowsHide: true })
+      const out = stdout.trim()
+      console.log(`[TaskbarDocker] Dock execution output:\n${out}`)
+
+      if (out.includes('DOCKED_OK')) {
+        // DOCKED_OK taskbar:0x... widget:0x... client:x,y,w,h screen:x,y,w,h dpi:...
+        const taskbarMatch = out.match(/taskbar:(0x[0-9a-fA-F]+)/)
+        const widgetMatch = out.match(/widget:(0x[0-9a-fA-F]+)/)
+        const clientMatch = out.match(/client:([-\d]+),([-\d]+),([-\d]+),([-\d]+)/)
+        const screenMatch = out.match(/screen:([-\d]+),([-\d]+),([-\d]+),([-\d]+)/)
+        const dpiMatch = out.match(/dpi:(\d+)/)
+
+        if (taskbarMatch) {
+          this.lastTaskbarHwnd = taskbarMatch[1]
+        }
+
+        return {
+          success: true,
+          taskbarHwnd: taskbarMatch?.[1],
+          widgetHwnd: widgetMatch?.[1] || hwnd,
+          clientRect: clientMatch ? {
+            x: parseInt(clientMatch[1], 10),
+            y: parseInt(clientMatch[2], 10),
+            width: parseInt(clientMatch[3], 10),
+            height: parseInt(clientMatch[4], 10)
+          } : undefined,
+          screenRect: screenMatch ? {
+            x: parseInt(screenMatch[1], 10),
+            y: parseInt(screenMatch[2], 10),
+            width: parseInt(screenMatch[3], 10),
+            height: parseInt(screenMatch[4], 10)
+          } : undefined,
+          dpi: dpiMatch ? parseInt(dpiMatch[1], 10) : undefined,
+          rawOutput: out
+        }
+      }
+
+      return { success: false, error: out, rawOutput: out }
+    } catch (err: any) {
+      console.error('[TaskbarDocker] Dock execution failed:', err)
+      return { success: false, error: err.message, rawOutput: err.stdout }
+    }
+  }
+
+  /**
+   * 작업표시줄에서 분리하여 독립 창으로 복원 (플로팅 전환 시 사용)
+   */
+  public static async undockWindow(win: BrowserWindow): Promise<boolean> {
+    if (!win || win.isDestroyed()) return false
+
+    const exe = this.getDockerPath()
+    if (!fs.existsSync(exe)) return false
+
+    const hwnd = this.getHwnd(win)
+    try {
+      const { stdout } = await execFileAsync(exe, ['undock', hwnd], { windowsHide: true })
+      this.lastTaskbarHwnd = null
+      return stdout.includes('UNDOCKED_OK')
+    } catch (err) {
+      console.warn('[TaskbarDocker] Undock failed:', err)
+      return false
+    }
+  }
+
+  /**
+   * 도킹 상태 확인 (부모 HWND가 정상적으로 유지되고 있는지 체크)
+   */
+  public static async checkDockStatus(win: BrowserWindow): Promise<boolean> {
+    if (!win || win.isDestroyed()) return false
+
+    const exe = this.getDockerPath()
+    if (!fs.existsSync(exe)) return false
+
+    const hwnd = this.getHwnd(win)
+    const args = ['checkdock', hwnd]
+    if (this.lastTaskbarHwnd) {
+      args.push(this.lastTaskbarHwnd)
+    }
+
+    try {
+      const { stdout } = await execFileAsync(exe, args, { windowsHide: true })
+      return stdout.includes('DOCK_HEALTHY')
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * 팝업 앵커링을 위한 위젯의 실제 화면 절대 좌표(GetWindowRect) 조회
+   */
+  public static async getWidgetScreenRect(
+    win: BrowserWindow
+  ): Promise<{ x: number; y: number; width: number; height: number } | null> {
+    if (!win || win.isDestroyed()) return null
+
+    const exe = this.getDockerPath()
+    if (!fs.existsSync(exe)) return win.getBounds()
+
+    const hwnd = this.getHwnd(win)
+    try {
+      const { stdout } = await execFileAsync(exe, ['getscreenrect', hwnd], { windowsHide: true })
+      const parts = stdout.trim().split(',')
+      if (parts.length === 4) {
+        return {
+          x: parseInt(parts[0], 10),
+          y: parseInt(parts[1], 10),
+          width: parseInt(parts[2], 10),
+          height: parseInt(parts[3], 10)
+        }
+      }
+    } catch (err) {
+      console.warn('[TaskbarDocker] getscreenrect failed, falling back to win.getBounds():', err)
+    }
+
+    return win.getBounds()
+  }
+
+  /**
+   * 도킹 헬스체크 시작 (Explorer 재시작 또는 창 분실 시 복구 콜백 호출)
+   */
+  public static startDockHealthCheck(win: BrowserWindow, onRepair: () => void): void {
+    this.stopDockHealthCheck()
+    this.healthCheckTimer = setInterval(async () => {
+      if (!win || win.isDestroyed()) {
+        this.stopDockHealthCheck()
+        return
+      }
+
+      const isHealthy = await this.checkDockStatus(win)
+      if (!isHealthy) {
+        console.warn('[TaskbarDocker] Dock health check failed. Triggering re-dock repair...')
+        onRepair()
+      }
+    }, 2000)
+  }
+
+  public static stopDockHealthCheck(): void {
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer)
+      this.healthCheckTimer = null
+    }
+  }
+
+  /**
+   * 플로팅 모드 전용: staytop 프로세스 기동 (도킹 모드에서는 절대 실행하지 않음)
+   */
+  public static startStayTop(win: BrowserWindow, config?: WidgetConfig): void {
     if (!win || win.isDestroyed()) return
     this.stopStayTop()
+
+    // docked 모드인 경우 실행 거부
+    if (config?.placementMode === 'docked') {
+      console.log('[TaskbarDocker] Skipping staytop: widget is in native docked mode')
+      return
+    }
 
     const exe = this.getDockerPath()
     if (!fs.existsSync(exe)) {
@@ -60,7 +267,7 @@ export class TaskbarDocker {
     }
 
     const hwnd = this.getHwnd(win)
-    console.log(`[TaskbarDocker] Starting bulletproof staytop for HWND ${hwnd}...`)
+    console.log(`[TaskbarDocker] Starting floating staytop for HWND ${hwnd}...`)
 
     try {
       this.stayTopProcess = spawn(exe, ['staytop', hwnd, '600'], {
@@ -91,11 +298,7 @@ export class TaskbarDocker {
   }
 
   /**
-   * 전체화면(게임/영상) 감지를 위한 상주 워처 프로세스 1개만 기동 (짧은 주기로 매번 새 프로세스를
-   * spawn하면 .NET 프로세스 기동 비용 때문에 시스템 전역에 커서 busy 현상이 생겨 상주 방식으로 변경)
-   * 상태가 바뀔 때만 stdout에 "1"/"0" 한 줄이 오므로 그때만 콜백 호출
-   * widgetWin을 넘기면 그 창과 같은 모니터에서 전체화면일 때만 감지 (다른 모니터의 전체화면 앱에
-   * 포커스가 가도 위젯이 사라지지 않도록)
+   * 전체화면(게임/영상) 감지를 위한 상주 워처 프로세스 (플로팅 모드 전용)
    */
   public static startFullscreenWatcher(widgetWin: BrowserWindow, onChange: (isFullscreen: boolean) => void): void {
     this.stopFullscreenWatcher()
@@ -138,7 +341,7 @@ export class TaskbarDocker {
   }
 
   /**
-   * 화면 및 작업표시줄 기준 절대 좌표 계산 (정확한 좌/우측 정렬 보장)
+   * 화면 및 작업표시줄 기준 절대 좌표 계산 (플로팅 모드용)
    */
   public static calculatePosition(
     config: WidgetConfig,
@@ -149,7 +352,7 @@ export class TaskbarDocker {
   }
 
   /**
-   * 위젯 위치 및 크기 즉각 적용
+   * 위젯 위치 및 크기 즉각 적용 (플로팅 모드 전용)
    */
   public static applyBounds(
     win: BrowserWindow,
@@ -158,6 +361,9 @@ export class TaskbarDocker {
     height: number
   ): void {
     if (!win || win.isDestroyed()) return
+    // [중요] docked 모드에서는 Electron setBounds가 native docked HWND를 이동하거나 resize하지 못하도록 차단
+    if (config.placementMode !== 'floating') return
+
     const { x, y } = this.calculatePosition(config, width, height)
     win.setBounds({
       x: Math.round(x),

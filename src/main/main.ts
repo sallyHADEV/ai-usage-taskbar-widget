@@ -76,32 +76,47 @@ function applyWindowTopmost(config: WidgetConfig) {
   if (!widgetWindow || widgetWindow.isDestroyed()) return
 
   if (config.placementMode === 'floating') {
-    // 플로팅 모드는 C# staytop 프로세스를 중단하고 Electron의 네이티브 alwaysOnTop만 제어
-    TaskbarDocker.stopStayTop()
+    // 플로팅 모드는 C# staytop 프로세스 및 도킹 헬스체크를 중단하고 Electron의 네이티브 alwaysOnTop 제어
+    TaskbarDocker.stopDockHealthCheck()
     const isAlwaysTop = config.alwaysOnTop !== false
     if (isAlwaysTop) {
       widgetWindow.setAlwaysOnTop(true, 'screen-saver', 9999)
+      TaskbarDocker.startStayTop(widgetWindow, config)
     } else {
       widgetWindow.setAlwaysOnTop(false)
+      TaskbarDocker.stopStayTop()
     }
   } else {
-    // 작업표시줄 내부 도킹 모드는 뒤로 숨지 않도록 최상위 유지
-    widgetWindow.setAlwaysOnTop(true, 'screen-saver', 9999)
-    TaskbarDocker.startStayTop(widgetWindow)
+    // [중요 원칙]: 작업표시줄 child HWND 도킹 모드에서는 setAlwaysOnTop 및 staytop을 일절 사용하지 않음
+    TaskbarDocker.stopStayTop()
+    widgetWindow.setAlwaysOnTop(false)
   }
 }
 
-function updateWidgetBounds() {
+async function updateWidgetBounds() {
   if (!widgetWindow || widgetWindow.isDestroyed()) return
   const config = accountStore.getConfig()
-  TaskbarDocker.applyBounds(widgetWindow, config, currentWidgetWidth, currentWidgetHeight)
+
+  if (config.placementMode === 'floating') {
+    TaskbarDocker.applyBounds(widgetWindow, config, currentWidgetWidth, currentWidgetHeight)
+  } else {
+    // 네이티브 작업표시줄 도킹 실행
+    const res = await TaskbarDocker.dockWindow(widgetWindow, config, currentWidgetWidth, currentWidgetHeight)
+    if (res.success) {
+      TaskbarDocker.startDockHealthCheck(widgetWindow, () => {
+        console.log('[Main] Explorer restart or dock lost detected, re-docking widget...')
+        updateWidgetBounds()
+      })
+    }
+  }
 }
 
 function createWidgetWindow() {
   const config = accountStore.getConfig()
+  const isFloating = config.placementMode === 'floating'
   const { x, y } = TaskbarDocker.calculatePosition(config, currentWidgetWidth, currentWidgetHeight)
 
-  console.log(`[Widget] Creating widget window at (${x}, ${y}) size ${currentWidgetWidth}x${currentWidgetHeight}`)
+  console.log(`[Widget] Creating widget window at (${x}, ${y}) size ${currentWidgetWidth}x${currentWidgetHeight} mode=${config.placementMode || 'docked'}`)
 
   widgetWindow = new BrowserWindow({
     x,
@@ -110,7 +125,7 @@ function createWidgetWindow() {
     height: currentWidgetHeight,
     frame: false,
     transparent: true,
-    alwaysOnTop: true,
+    alwaysOnTop: isFloating && (config.alwaysOnTop !== false),
     skipTaskbar: true,
     resizable: false,
     hasShadow: false,
@@ -125,7 +140,9 @@ function createWidgetWindow() {
     }
   })
 
-  widgetWindow.setAlwaysOnTop(true, 'screen-saver', 9999)
+  if (isFloating && config.alwaysOnTop !== false) {
+    widgetWindow.setAlwaysOnTop(true, 'screen-saver', 9999)
+  }
   widgetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
   widgetWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
@@ -136,11 +153,11 @@ function createWidgetWindow() {
     console.log('[WidgetWindow Console]:', msg)
   })
 
-  widgetWindow.once('ready-to-show', () => {
+  widgetWindow.once('ready-to-show', async () => {
     widgetWindow?.showInactive()
-    updateWidgetBounds()
+    await updateWidgetBounds()
     if (widgetWindow) {
-      applyWindowTopmost(config)
+      applyWindowTopmost(accountStore.getConfig())
     }
   })
 
@@ -155,7 +172,7 @@ function createWidgetWindow() {
   })
 }
 
-function positionPopupWindow() {
+async function positionPopupWindow() {
   if (!popupWindow || popupWindow.isDestroyed()) return
   const config = accountStore.getConfig()
 
@@ -164,10 +181,26 @@ function positionPopupWindow() {
   let widgetW: number
 
   if (widgetWindow && !widgetWindow.isDestroyed()) {
-    const bounds = widgetWindow.getBounds()
-    widgetX = bounds.x
-    widgetY = bounds.y
-    widgetW = bounds.width
+    if (config.placementMode !== 'floating') {
+      // docked 모드에서는 widgetWindow.getBounds()가 taskbar client 상대좌표이므로
+      // TaskbarDock.exe getscreenrect로 화면 절대 좌표를 정확히 획득
+      const screenRect = await TaskbarDocker.getWidgetScreenRect(widgetWindow)
+      if (screenRect) {
+        widgetX = screenRect.x
+        widgetY = screenRect.y
+        widgetW = screenRect.width
+      } else {
+        const bounds = widgetWindow.getBounds()
+        widgetX = bounds.x
+        widgetY = bounds.y
+        widgetW = bounds.width
+      }
+    } else {
+      const bounds = widgetWindow.getBounds()
+      widgetX = bounds.x
+      widgetY = bounds.y
+      widgetW = bounds.width
+    }
   } else {
     const pos = calculateWidgetPosition(config, currentWidgetWidth, currentWidgetHeight)
     widgetX = pos.x
@@ -229,7 +262,7 @@ function createPopupWindow() {
   })
 }
 
-function showPopup(focus = false, lock = false) {
+async function showPopup(focus = false, lock = false) {
   cancelHidePopup()
   if (lock) {
     isPopupLocked = true
@@ -243,7 +276,7 @@ function showPopup(focus = false, lock = false) {
 
   if (!isAlreadyVisible) {
     // 팝업이 닫혀 있다가 새로 열릴 때만 위젯의 현재 위치를 기준으로 좌표를 결정하여 띄움 (뜬 후에는 자리 고정)
-    positionPopupWindow()
+    await positionPopupWindow()
 
     // 숨긴 창을 다시 show하면 숨기기 직전의 마지막 프레임(완전히 열린 팝업)이 잠깐 보인 뒤
     // 등장 애니메이션이 처음부터 재생되어 두 번 열리는 것처럼 보임. 투명하게 띄워두고
@@ -305,12 +338,12 @@ function hidePopup(force = false) {
   }
 }
 
-function togglePopup() {
+async function togglePopup() {
   cancelHidePopup()
   if (popupWindow && popupWindow.isVisible()) {
     hidePopup(true)
   } else {
-    showPopup(true, true) // 클릭으로 열 때는 닫기 버튼 누를 때까지 락 유지
+    await showPopup(true, true) // 클릭으로 열 때는 닫기 버튼 누를 때까지 락 유지
   }
 }
 
@@ -374,7 +407,7 @@ function updateTrayMenu() {
   const contextMenu = Menu.buildFromTemplate([
     {
       label: t('trayToggleWidget'),
-      click: () => {
+      click: async () => {
         if (!widgetWindow) return
         if (widgetWindow.isVisible()) {
           widgetManuallyHidden = true
@@ -384,13 +417,15 @@ function updateTrayMenu() {
           widgetManuallyHidden = false
           widgetHiddenForFullscreen = false
           widgetWindow.show()
-          updateWidgetBounds()
+          await updateWidgetBounds()
         }
       }
     },
     {
       label: t('trayOpenPopup'),
-      click: () => showPopup(true, true)
+      click: () => {
+        showPopup(true, true)
+      }
     },
     { type: 'separator' },
     {
@@ -462,7 +497,7 @@ function setupIpcHandlers() {
     return getAppState()
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_CONFIG, (_event, nextConfig: WidgetConfig) => {
+  ipcMain.handle(IPC_CHANNELS.UPDATE_CONFIG, async (_event, nextConfig: WidgetConfig) => {
     const prevConfig = accountStore.getConfig()
     accountStore.saveConfig(nextConfig)
 
@@ -476,7 +511,18 @@ function setupIpcHandlers() {
       quotaManager.startPolling(nextConfig.refreshIntervalSec, false)
     }
 
-    updateWidgetBounds()
+    // 모드 전환 감지 (docked <-> floating)
+    if (prevConfig.placementMode !== nextConfig.placementMode && widgetWindow && !widgetWindow.isDestroyed()) {
+      if (nextConfig.placementMode === 'floating') {
+        TaskbarDocker.stopDockHealthCheck()
+        await TaskbarDocker.undockWindow(widgetWindow)
+      } else {
+        TaskbarDocker.stopStayTop()
+        widgetWindow.setAlwaysOnTop(false)
+      }
+    }
+
+    await updateWidgetBounds()
     applyWindowTopmost(nextConfig)
     // [불변 원칙]: 팝업창은 최초 등장 시점에만 위젯 위치 기준으로 좌표를 설정합니다.
     // 사용자가 팝업창을 열고 조작(슬라이더 등)하는 동안에는 팝업 위치가 이동하면 안 되므로
@@ -572,16 +618,16 @@ function setupIpcHandlers() {
     return getAppState()
   })
 
-  ipcMain.handle(IPC_CHANNELS.SHOW_POPUP, () => {
-    showPopup(false, false)
+  ipcMain.handle(IPC_CHANNELS.SHOW_POPUP, async () => {
+    await showPopup(false, false)
   })
 
   ipcMain.handle(IPC_CHANNELS.HIDE_POPUP, () => {
     hidePopup(true)
   })
 
-  ipcMain.handle(IPC_CHANNELS.TOGGLE_POPUP, () => {
-    togglePopup()
+  ipcMain.handle(IPC_CHANNELS.TOGGLE_POPUP, async () => {
+    await togglePopup()
   })
 
   ipcMain.handle(IPC_CHANNELS.LOCK_POPUP, () => {
@@ -593,16 +639,16 @@ function setupIpcHandlers() {
     isPopupLocked = false
   })
 
-  ipcMain.handle(IPC_CHANNELS.RESIZE_WIDGET, (_event, width: number, height: number) => {
+  ipcMain.handle(IPC_CHANNELS.RESIZE_WIDGET, async (_event, width: number, height: number) => {
     if (width > 0 && height > 0) {
       currentWidgetWidth = Math.round(width)
       currentWidgetHeight = Math.round(height)
-      updateWidgetBounds()
+      await updateWidgetBounds()
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.OPEN_SETTINGS, () => {
-    showPopup(true, true)
+  ipcMain.handle(IPC_CHANNELS.OPEN_SETTINGS, async () => {
+    await showPopup(true, true)
   })
 
   ipcMain.handle(IPC_CHANNELS.DETECT_LOCAL_APPS, async () => {
@@ -640,21 +686,26 @@ app.whenReady().then(() => {
 
   setInterval(() => {
     if (widgetWindow && !widgetWindow.isDestroyed() && widgetWindow.isVisible()) {
-      widgetWindow.moveTop()
+      const cfg = accountStore.getConfig()
+      if (cfg.placementMode === 'floating') {
+        widgetWindow.moveTop()
+      }
     }
   }, 2000)
 
   TaskbarDocker.startFullscreenWatcher(widgetWindow!, (isFullscreen) => {
     if (!widgetWindow || widgetWindow.isDestroyed() || widgetManuallyHidden) return
-
-    if (isFullscreen && widgetWindow.isVisible()) {
-      widgetHiddenForFullscreen = true
-      widgetWindow.hide()
-      hidePopup(true)
-    } else if (!isFullscreen && widgetHiddenForFullscreen) {
-      widgetHiddenForFullscreen = false
-      widgetWindow.show()
-      updateWidgetBounds()
+    const cfg = accountStore.getConfig()
+    if (cfg.placementMode === 'floating') {
+      if (isFullscreen && widgetWindow.isVisible()) {
+        widgetHiddenForFullscreen = true
+        widgetWindow.hide()
+        hidePopup(true)
+      } else if (!isFullscreen && widgetHiddenForFullscreen) {
+        widgetHiddenForFullscreen = false
+        widgetWindow.show()
+        updateWidgetBounds()
+      }
     }
   })
 
@@ -678,6 +729,13 @@ app.on('before-quit', () => {
   }
   TaskbarDocker.stopStayTop()
   TaskbarDocker.stopFullscreenWatcher()
+  TaskbarDocker.stopDockHealthCheck()
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    const cfg = accountStore.getConfig()
+    if (cfg.placementMode !== 'floating') {
+      TaskbarDocker.undockWindow(widgetWindow)
+    }
+  }
   CodexAppServerClient.close()
   if (tray) {
     try {
