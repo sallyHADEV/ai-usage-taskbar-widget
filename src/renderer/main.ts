@@ -226,6 +226,8 @@ if (!(window as any).api) {
     ],
     scheduleHidePopup: () => {},
     cancelHidePopup: () => {},
+    popupReady: () => {},
+    onPopupOpened: () => {},
     onStateChange: (fn: (s: AppState) => void) => {
       listeners.push(fn)
     }
@@ -270,6 +272,12 @@ async function init() {
     renderPopup(state)
     window.api.onStateChange((nextState) => {
       renderPopup(nextState)
+    })
+    // 메인이 팝업을 투명하게 띄운 상태: 등장 애니메이션 첫 프레임이 화면에 반영된 뒤 불투명 전환 요청
+    window.api.onPopupOpened((nextState) => {
+      currentState = nextState
+      renderPopupView(appEl, nextState, true)
+      requestAnimationFrame(() => requestAnimationFrame(() => window.api.popupReady()))
     })
   } else {
     renderWidget(state)

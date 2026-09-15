@@ -7,12 +7,6 @@ let activeTab: 'usage' | 'accounts' | 'settings' = 'usage'
 let isAddingCustom = false
 let isSliderDragging = false
 
-// 팝업이 실제로 열릴 때만 등장 애니메이션 재생 (설정 클릭 등 재렌더링 시 깜빡임 방지)
-let shouldPlayEnterAnimation = true
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) shouldPlayEnterAnimation = true
-})
-
 // 캐시된 감지 앱 목록
 let cachedDetectedApps: any[] = [
   { id: 'local-antigravity', name: 'Google Antigravity', provider: 'antigravity', installed: true, running: true, iconLetter: 'A', brandColor: '#2563EB' },
@@ -20,7 +14,8 @@ let cachedDetectedApps: any[] = [
   { id: 'local-codex', name: 'Codex CLI', provider: 'codex', installed: true, running: false, iconLetter: 'X', brandColor: '#6366F1' }
 ]
 
-export function renderPopupView(container: HTMLElement, state: AppState) {
+// animate: 팝업이 실제로 열릴 때만 true (설정 클릭 등 재렌더링 시 애니메이션이 다시 재생되어 깜빡이는 것 방지)
+export function renderPopupView(container: HTMLElement, state: AppState, animate = false) {
   // 슬라이더 드래그 중에는 사용자 조작(포커스/마우스) 보호를 위해 전체 DOM 재작성 방지
   if (isSliderDragging) {
     return
@@ -30,7 +25,7 @@ export function renderPopupView(container: HTMLElement, state: AppState) {
   const prevScrollTop = container.querySelector('.popup-body')?.scrollTop ?? 0
 
   container.innerHTML = `
-    <div class="popup-root ${shouldPlayEnterAnimation ? 'popup-enter' : ''}">
+    <div class="popup-root ${animate ? 'popup-enter' : ''}">
       <!-- 헤더 -->
       <div class="popup-header">
         <div class="popup-title">
@@ -65,8 +60,6 @@ export function renderPopupView(container: HTMLElement, state: AppState) {
 
   const popupBody = container.querySelector('.popup-body')
   if (popupBody) popupBody.scrollTop = prevScrollTop
-
-  shouldPlayEnterAnimation = false
 }
 
 function renderTabContent(state: AppState): string {
