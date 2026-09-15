@@ -46,6 +46,10 @@ export class QuotaManager {
 
   private createInitialUsage(acc: AccountConfig): AccountUsage {
     if (acc.customMock) {
+      const isWeeklyOnly = !!acc.customMock.isWeeklyOnly
+      const primaryPct = isWeeklyOnly ? acc.customMock.weeklyPercent : acc.customMock.primaryPercent
+      const primaryReset = isWeeklyOnly ? acc.customMock.weeklyReset : acc.customMock.primaryReset
+
       return {
         id: acc.id,
         name: acc.name,
@@ -53,12 +57,13 @@ export class QuotaManager {
         iconLetter: acc.customMock.iconLetter || acc.name.charAt(0).toUpperCase(),
         brandColor: acc.customMock.brandColor || '#3B82F6',
         status: 'ready',
+        isWeeklyOnly,
         primaryQuota: {
-          remainingFraction: (100 - acc.customMock.primaryPercent) / 100,
-          percentLeft: 100 - acc.customMock.primaryPercent,
-          percentUsed: acc.customMock.primaryPercent,
-          resetCountdown: acc.customMock.primaryReset,
-          isExhausted: acc.customMock.primaryPercent >= 100
+          remainingFraction: (100 - primaryPct) / 100,
+          percentLeft: 100 - primaryPct,
+          percentUsed: primaryPct,
+          resetCountdown: primaryReset,
+          isExhausted: primaryPct >= 100
         },
         weeklyQuota: {
           remainingFraction: (100 - acc.customMock.weeklyPercent) / 100,

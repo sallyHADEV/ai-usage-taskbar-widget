@@ -135,6 +135,16 @@ function renderUsageTab(state: AppState): string {
         </div>
 
         <div class="card-quota-grid">
+          ${u.isWeeklyOnly ? `
+          <div class="quota-box" style="grid-column: 1 / -1;">
+            <div class="quota-box-title">
+              <span>${t('weeklyLimit')}</span>
+              <span>${t('usageLabel')}</span>
+            </div>
+            <div class="quota-box-percent" style="color: ${primaryColor}">${primaryUsed}%</div>
+            <div class="quota-box-reset">${t('resetLabel', { time: `<strong>${u.primaryQuota.resetCountdown}</strong>` })}</div>
+          </div>
+          ` : `
           <div class="quota-box">
             <div class="quota-box-title">
               <span>${t('sessionLimit5h')}</span>
@@ -151,6 +161,7 @@ function renderUsageTab(state: AppState): string {
             <div class="quota-box-percent" style="color: ${weeklyColor}">${weeklyUsed}%</div>
             <div class="quota-box-reset">${t('resetLabel', { time: `<strong>${u.weeklyQuota?.resetCountdown || '--'}</strong>` })}</div>
           </div>
+          `}
         </div>
 
         ${modelsHtml}

@@ -300,38 +300,46 @@ export class CodexAppServerClient {
       throw new Error('Codex 레이트리밋 정보가 비어 있습니다.')
     }
 
-    // primary (세션 한도, 보통 5시간)
-    const primaryLimit = rateLimits.primary || {}
-    const sessionUsed = Math.min(100, Math.max(0, Math.round(Number(primaryLimit.usedPercent) || 0)))
-    const sessionLeft = Math.max(0, 100 - sessionUsed)
-    const sessionResetSec = Number(primaryLimit.resetsAt) || 0
-    const sessionResetIso = sessionResetSec > 0 ? new Date(sessionResetSec * 1000).toISOString() : undefined
-    const sessionCountdown = sessionResetIso ? formatCountdown(sessionResetIso) : '--'
+    const isPro = planTypeRaw.toLowerCase() === 'pro' || String(rateLimits.planType).toLowerCase() === 'pro'
 
-    // secondary (주간 한도, 7일)
-    const secondaryLimit = rateLimits.secondary || {}
-    const weeklyUsed = Math.min(100, Math.max(0, Math.round(Number(secondaryLimit.usedPercent) || 0)))
-    const weeklyLeft = Math.max(0, 100 - weeklyUsed)
-    const weeklyResetSec = Number(secondaryLimit.resetsAt) || 0
-    const weeklyResetIso = weeklyResetSec > 0 ? new Date(weeklyResetSec * 1000).toISOString() : undefined
-    const weeklyCountdown = weeklyResetIso ? formatCountdown(weeklyResetIso) : '--'
+    const primaryLimit = rateLimits.primary
+    const secondaryLimit = rateLimits.secondary
 
-    // 세부 모델 항목 구성
+    const primaryWindowMins = Number(primaryLimit?.windowDurationMins) || 0
+    const secondaryWindowMins = Number(secondaryLimit?.windowDurationMins) || 0
+
+    // Pro 플랜이거나, 5시간 세션 쿼터 없이 1주일(주간) 쿼터만 단독 제공되는 경우 판별
+    const isWeeklyOnly = isPro ||
+      (!primaryLimit && !!secondaryLimit) ||
+      (primaryWindowMins >= 1440)
+
     const models: ModelQuotaDetail[] = []
-    models.push({
-      modelId: 'codex-5h',
-      displayName: 'Codex 세션 한도 (5시간)',
-      quota: {
-        remainingFraction: sessionLeft / 100,
-        percentLeft: sessionLeft,
-        percentUsed: sessionUsed,
-        resetTime: sessionResetIso,
-        resetCountdown: sessionCountdown,
-        isExhausted: sessionLeft <= 1
-      }
-    })
 
-    if (secondaryLimit.usedPercent !== undefined) {
+    let sessionLeft = 100
+    let sessionUsed = 0
+    let sessionResetIso: string | undefined
+    let sessionCountdown = '--'
+
+    let weeklyLeft = 100
+    let weeklyUsed = 0
+    let weeklyResetIso: string | undefined
+    let weeklyCountdown = '--'
+
+    if (isWeeklyOnly) {
+      // 주간 한도 데이터 소스 선택: primary가 주간(>=1440분)이면 primary 우선, 아니면 secondary
+      const weeklySource = (primaryWindowMins >= 1440 ? primaryLimit : (secondaryLimit || primaryLimit)) || {}
+      weeklyUsed = Math.min(100, Math.max(0, Math.round(Number(weeklySource.usedPercent) || 0)))
+      weeklyLeft = Math.max(0, 100 - weeklyUsed)
+      const weeklyResetSec = Number(weeklySource.resetsAt) || 0
+      weeklyResetIso = weeklyResetSec > 0 ? new Date(weeklyResetSec * 1000).toISOString() : undefined
+      weeklyCountdown = weeklyResetIso ? formatCountdown(weeklyResetIso) : '--'
+
+      // Pro / 주간 단독 모드에서는 primaryQuota도 주간 데이터로 설정
+      sessionUsed = weeklyUsed
+      sessionLeft = weeklyLeft
+      sessionResetIso = weeklyResetIso
+      sessionCountdown = weeklyCountdown
+
       models.push({
         modelId: 'codex-weekly',
         displayName: 'Codex 주간 한도 (7일)',
@@ -344,6 +352,49 @@ export class CodexAppServerClient {
           isExhausted: weeklyLeft <= 1
         }
       })
+    } else {
+      // Plus / 기존 5시간 세션 + 7일 주간 한도
+      const pLimit = primaryLimit || {}
+      sessionUsed = Math.min(100, Math.max(0, Math.round(Number(pLimit.usedPercent) || 0)))
+      sessionLeft = Math.max(0, 100 - sessionUsed)
+      const sessionResetSec = Number(pLimit.resetsAt) || 0
+      sessionResetIso = sessionResetSec > 0 ? new Date(sessionResetSec * 1000).toISOString() : undefined
+      sessionCountdown = sessionResetIso ? formatCountdown(sessionResetIso) : '--'
+
+      const sLimit = secondaryLimit || {}
+      weeklyUsed = Math.min(100, Math.max(0, Math.round(Number(sLimit.usedPercent) || 0)))
+      weeklyLeft = Math.max(0, 100 - weeklyUsed)
+      const weeklyResetSec = Number(sLimit.resetsAt) || 0
+      weeklyResetIso = weeklyResetSec > 0 ? new Date(weeklyResetSec * 1000).toISOString() : undefined
+      weeklyCountdown = weeklyResetIso ? formatCountdown(weeklyResetIso) : '--'
+
+      models.push({
+        modelId: 'codex-5h',
+        displayName: 'Codex 세션 한도 (5시간)',
+        quota: {
+          remainingFraction: sessionLeft / 100,
+          percentLeft: sessionLeft,
+          percentUsed: sessionUsed,
+          resetTime: sessionResetIso,
+          resetCountdown: sessionCountdown,
+          isExhausted: sessionLeft <= 1
+        }
+      })
+
+      if (secondaryLimit && secondaryLimit.usedPercent !== undefined) {
+        models.push({
+          modelId: 'codex-weekly',
+          displayName: 'Codex 주간 한도 (7일)',
+          quota: {
+            remainingFraction: weeklyLeft / 100,
+            percentLeft: weeklyLeft,
+            percentUsed: weeklyUsed,
+            resetTime: weeklyResetIso,
+            resetCountdown: weeklyCountdown,
+            isExhausted: weeklyLeft <= 1
+          }
+        })
+      }
     }
 
     const usage: AccountUsage = {
@@ -355,6 +406,7 @@ export class CodexAppServerClient {
       email,
       tier: `${planName} (공식 app-server)`,
       status: 'ready',
+      isWeeklyOnly,
       primaryQuota: {
         remainingFraction: sessionLeft / 100,
         percentLeft: sessionLeft,

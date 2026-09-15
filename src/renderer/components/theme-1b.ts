@@ -41,10 +41,14 @@ export function renderTheme1b(account: AccountUsage, config: WidgetConfig): stri
   const unitLabel = config.showUsedPercent ? t('unitUsed') : t('unitLeft')
 
   const iconHtml = renderAiIcon(account.provider, account.name, config.iconStyle, 18)
-  const showWeekly = config.showWeeklyLimit !== false && !!account.weeklyQuota
-  const tooltip = showWeekly
-    ? t('widgetTooltip', { name: account.name, p: primaryDisplay, pr: primaryReset, w: weeklyDisplay, wr: weeklyReset, unit: unitLabel })
-    : t('widgetTooltipNoWeekly', { name: account.name, p: primaryDisplay, pr: primaryReset, unit: unitLabel })
+  const isWeeklyOnly = !!account.isWeeklyOnly
+  const showWeekly = !isWeeklyOnly && config.showWeeklyLimit !== false && !!account.weeklyQuota
+
+  const tooltip = isWeeklyOnly
+    ? t('widgetTooltipWeeklyOnly', { name: account.name, w: primaryDisplay, wr: primaryReset, unit: unitLabel })
+    : (showWeekly
+      ? t('widgetTooltip', { name: account.name, p: primaryDisplay, pr: primaryReset, w: weeklyDisplay, wr: weeklyReset, unit: unitLabel })
+      : t('widgetTooltipNoWeekly', { name: account.name, p: primaryDisplay, pr: primaryReset, unit: unitLabel }))
 
   return `
     <div class="account-item" data-account-id="${account.id}" title="${tooltip}">
