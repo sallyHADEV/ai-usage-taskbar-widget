@@ -4,7 +4,7 @@ import type { AccountConfig, AppState, WidgetConfig } from '../common/types.js'
 
 export const api = {
   getState: (): Promise<AppState> => ipcRenderer.invoke(IPC_CHANNELS.GET_STATE),
-  updateConfig: (config: WidgetConfig): Promise<AppState> => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_CONFIG, config),
+  updateConfig: (patch: Partial<WidgetConfig>): Promise<AppState> => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_CONFIG, patch),
   refreshQuota: (): Promise<AppState> => ipcRenderer.invoke(IPC_CHANNELS.REFRESH_QUOTA),
   addGoogleAccount: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke(IPC_CHANNELS.ADD_GOOGLE_OAUTH),
   addCustomAccount: (account: Partial<AccountConfig>): Promise<AppState> => ipcRenderer.invoke(IPC_CHANNELS.ADD_CUSTOM_ACCOUNT, account),

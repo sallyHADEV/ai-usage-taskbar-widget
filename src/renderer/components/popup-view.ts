@@ -418,7 +418,16 @@ function renderSettingsTab(state: AppState): string {
           <span>${t('offsetLabel')}</span>
           <span id="label-offset">${cfg.offsetPx}px</span>
         </div>
-        <input type="range" class="range-slider" id="slider-offset" min="0" max="350" value="${cfg.offsetPx}" />
+        <input type="range" class="range-slider" id="slider-offset" min="-150" max="350" value="${cfg.offsetPx}" />
+      </div>
+
+      <!-- 세로 오프셋 -->
+      <div class="form-group">
+        <div class="form-label">
+          <span>${t('verticalOffsetLabel')}</span>
+          <span id="label-voffset">${cfg.verticalOffsetPx ?? 0}px</span>
+        </div>
+        <input type="range" class="range-slider" id="slider-voffset" min="-20" max="20" value="${cfg.verticalOffsetPx ?? 0}" />
       </div>
 
       <!-- 투명도 알파 -->
@@ -591,93 +600,91 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
     btn.addEventListener('click', () => {
       const theme = btn.getAttribute('data-theme') as ThemeType
       if (theme) {
-        window.api.updateConfig({ ...state.config, theme })
+        window.api.updateConfig({ theme })
       }
     })
   })
 
   container.querySelector('#btn-icon-color')?.addEventListener('click', () => {
-    window.api.updateConfig({ ...state.config, iconStyle: 'color' })
+    window.api.updateConfig({ iconStyle: 'color' })
   })
 
   container.querySelector('#btn-icon-mono')?.addEventListener('click', () => {
-    window.api.updateConfig({ ...state.config, iconStyle: 'monochrome' })
+    window.api.updateConfig({ iconStyle: 'monochrome' })
   })
 
   container.querySelector('#btn-place-docked')?.addEventListener('click', () => {
-    window.api.updateConfig({ ...state.config, placementMode: 'docked' })
+    window.api.updateConfig({ placementMode: 'docked' })
   })
 
   container.querySelector('#btn-place-floating')?.addEventListener('click', () => {
-    window.api.updateConfig({ ...state.config, placementMode: 'floating', showCardBackground: true })
+    window.api.updateConfig({ placementMode: 'floating', showCardBackground: true })
   })
 
   container.querySelector('#chk-always-on-top')?.addEventListener('change', (e) => {
     const checked = (e.target as HTMLInputElement).checked
-    window.api.updateConfig({ ...state.config, alwaysOnTop: checked })
+    window.api.updateConfig({ alwaysOnTop: checked })
   })
 
   container.querySelector('#chk-open-at-login')?.addEventListener('change', (e) => {
     const checked = (e.target as HTMLInputElement).checked
-    window.api.updateConfig({ ...state.config, openAtLogin: checked })
+    window.api.updateConfig({ openAtLogin: checked })
   })
 
   container.querySelector('#chk-color-usage')?.addEventListener('change', (e) => {
     const checked = (e.target as HTMLInputElement).checked
-    window.api.updateConfig({ ...state.config, colorByUsage: checked })
+    window.api.updateConfig({ colorByUsage: checked })
   })
 
   container.querySelector('#chk-show-used-percent')?.addEventListener('change', (e) => {
     const checked = (e.target as HTMLInputElement).checked
-    window.api.updateConfig({ ...state.config, showUsedPercent: checked })
+    window.api.updateConfig({ showUsedPercent: checked })
   })
 
   container.querySelector('#chk-show-card-bg')?.addEventListener('change', (e) => {
     const checked = (e.target as HTMLInputElement).checked
-    window.api.updateConfig({ ...state.config, showCardBackground: checked })
+    window.api.updateConfig({ showCardBackground: checked })
   })
 
   container.querySelector('#btn-align-right')?.addEventListener('click', () => {
-    window.api.updateConfig({ ...state.config, alignment: 'right' })
+    window.api.updateConfig({ alignment: 'right' })
   })
 
   container.querySelector('#btn-align-left')?.addEventListener('click', () => {
-    window.api.updateConfig({ ...state.config, alignment: 'left' })
+    window.api.updateConfig({ alignment: 'left' })
   })
 
-  // 오프셋 슬라이더 (조작 중 절대 꺼지지 않도록 잠금 + 디바운스 적용)
-  const sliderOffset = container.querySelector('#slider-offset') as HTMLInputElement
-  if (sliderOffset) {
-    sliderOffset.addEventListener('mousedown', () => {
-      isSliderDragging = true
-      window.api.lockPopup()
-    })
-    sliderOffset.addEventListener('touchstart', () => {
-      isSliderDragging = true
-      window.api.lockPopup()
-    })
+  // 가로/세로 오프셋 슬라이더 (조작 중 절대 꺼지지 않도록 잠금 + 디바운스 적용)
+  for (const [key, id] of [['offsetPx', 'offset'], ['verticalOffsetPx', 'voffset']] as const) {
+    const slider = container.querySelector(`#slider-${id}`) as HTMLInputElement
+    if (!slider) continue
 
-    sliderOffset.addEventListener('input', () => {
-      const val = parseInt(sliderOffset.value, 10)
-      const lbl = container.querySelector('#label-offset')
+    const onStart = () => {
+      isSliderDragging = true
+      window.api.lockPopup()
+    }
+    slider.addEventListener('mousedown', onStart)
+    slider.addEventListener('touchstart', onStart)
+
+    slider.addEventListener('input', () => {
+      const val = parseInt(slider.value, 10)
+      const lbl = container.querySelector(`#label-${id}`)
       if (lbl) lbl.textContent = `${val}px`
 
       // 메인 프로세스로 디바운스 전송 (위젯 실시간 이동 & 팝업 동기 추종)
       if (offsetUpdateTimeout) clearTimeout(offsetUpdateTimeout)
       offsetUpdateTimeout = setTimeout(() => {
-        window.api.updateConfig({ ...state.config, offsetPx: val })
+        window.api.updateConfig({ [key]: val })
       }, 50)
     })
 
-    const onFinishOffset = () => {
+    const onFinish = () => {
       isSliderDragging = false
-      const val = parseInt(sliderOffset.value, 10)
-      window.api.updateConfig({ ...state.config, offsetPx: val })
+      window.api.updateConfig({ [key]: parseInt(slider.value, 10) })
     }
-
-    sliderOffset.addEventListener('change', onFinishOffset)
-    sliderOffset.addEventListener('mouseup', onFinishOffset)
-    sliderOffset.addEventListener('touchend', onFinishOffset)
+    slider.addEventListener('change', onFinish)
+    slider.addEventListener('mouseup', onFinish)
+    slider.addEventListener('touchend', onFinish)
   }
 
   // 투명도 알파 슬라이더
@@ -690,13 +697,13 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
     })
     sliderAlpha.addEventListener('change', () => {
       const val = parseInt(sliderAlpha.value, 10)
-      window.api.updateConfig({ ...state.config, alphaPercent: val })
+      window.api.updateConfig({ alphaPercent: val })
     })
   }
 
   const selInterval = container.querySelector('#sel-interval') as HTMLSelectElement
   selInterval?.addEventListener('change', () => {
     const val = parseInt(selInterval.value, 10)
-    window.api.updateConfig({ ...state.config, refreshIntervalSec: val })
+    window.api.updateConfig({ refreshIntervalSec: val })
   })
 }

@@ -79,18 +79,21 @@ function renderWidget(state: AppState) {
     appEl.innerHTML = newHtml
 
     requestAnimationFrame(() => {
-      const container = document.getElementById('widget-container')
-      if (container) {
-        const rect = container.getBoundingClientRect()
-        // 여유 너비 +24px, 높이는 34px 기본에 맞춰 설정
-        const width = Math.ceil(rect.width) + 24
-        const height = Math.max(34, Math.ceil(rect.height) + 4)
-        if (width !== lastSentWidth || height !== lastSentHeight) {
-          lastSentWidth = width
-          lastSentHeight = height
-          window.api.resizeWidget(width, height)
+      requestAnimationFrame(() => {
+        const container = document.getElementById('widget-container')
+        if (container) {
+          const rect = container.getBoundingClientRect()
+          const naturalWidth = Math.max(rect.width, container.scrollWidth)
+          // 여유 너비 +24px, 높이는 34px 기본에 맞춰 설정
+          const width = Math.ceil(naturalWidth) + 24
+          const height = Math.max(34, Math.ceil(rect.height) + 4)
+          if (width !== lastSentWidth || height !== lastSentHeight) {
+            lastSentWidth = width
+            lastSentHeight = height
+            window.api.resizeWidget(width, height)
+          }
         }
-      }
+      })
     })
   }
 }
@@ -162,8 +165,8 @@ if (!(window as any).api) {
   const listeners: ((s: AppState) => void)[] = []
   ;(window as any).api = {
     getState: async () => mockState,
-    updateConfig: async (cfg: any) => {
-      mockState = { ...mockState, config: cfg }
+    updateConfig: async (patch: any) => {
+      mockState = { ...mockState, config: { ...mockState.config, ...patch } }
       listeners.forEach((fn) => fn(mockState))
       return mockState
     },
@@ -247,23 +250,18 @@ async function init() {
       }
     })
   } else {
-    // 위젯 클릭/포인터 이벤트 시 팝업 토글 (중복 트리거 방지 디바운스 적용)
+    // 위젯 클릭 이벤트 시 팝업 토글 (중복 트리거 방지 디바운스 적용)
     let lastToggleTime = 0
     const triggerToggle = (e: Event) => {
       e.stopPropagation()
       const now = Date.now()
       if (now - lastToggleTime < 300) return
       lastToggleTime = now
-      console.log('[Widget] Triggering togglePopup via user interaction')
+      console.log('[Widget] Click event handled, invoking togglePopup')
       window.api.togglePopup()
     }
 
     appEl.addEventListener('click', triggerToggle)
-    appEl.addEventListener('pointerup', (e) => {
-      if ((e as PointerEvent).button === 0) {
-        triggerToggle(e)
-      }
-    })
   }
 
   const state = await window.api.getState()
