@@ -43,13 +43,6 @@ export interface AccountConfig {
   provider: ProviderType
   enabled: boolean
   isLocalIde?: boolean
-  tokens?: {
-    accessToken: string
-    refreshToken: string
-    expiresAt: number
-    email?: string
-    projectId?: string
-  }
   customMock?: {
     primaryPercent: number
     primaryReset: string

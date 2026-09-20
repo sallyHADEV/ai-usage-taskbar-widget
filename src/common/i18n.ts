@@ -10,7 +10,6 @@ const dict = {
   trayOpenPopup: { ko: '상세 팝업 열기', en: 'Open Details' },
   trayAutoLaunch: { ko: '윈도우 시작 시 자동 실행', en: 'Launch at Login' },
   trayRefreshNow: { ko: '지금 새로고침', en: 'Refresh Now' },
-  trayAddGoogle: { ko: 'Google 계정 추가...', en: 'Add Google Account...' },
   trayQuit: { ko: '종료', en: 'Quit' },
   trayTooltip: { ko: 'AI 토큰 사용량 위젯', en: 'AI Token Usage Widget' },
 
@@ -53,13 +52,11 @@ const dict = {
   usageWeekly: { ko: '주간 사용량 (%)', en: 'Weekly Usage (%)' },
   save: { ko: '저장', en: 'Save' },
   cancel: { ko: '취소', en: 'Cancel' },
-  addGoogleOAuth: { ko: '+ Google OAuth 로그인', en: '+ Sign in with Google' },
   addManually: { ko: '+ 직접 입력', en: '+ Add Manually' },
   resetDefaults: { ko: '🔄 기본 3대 AI (Antigravity · Claude · Codex) 전체 초기화/복원', en: '🔄 Reset to Default 3 AIs (Antigravity · Claude · Codex)' },
   detectingApps: { ko: '로컬 프로세스 및 CLI 설치 경로 실시간 탐색 중...', en: 'Scanning local processes and CLI install paths...' },
   confirmDeleteAccount: { ko: '이 계정을 위젯에서 제거하시겠습니까? (로컬 앱 감지에서 언제든 다시 추가할 수 있습니다)', en: 'Remove this account from the widget? (You can re-add it anytime via local app detection.)' },
   confirmResetDefaults: { ko: '기본 3대 AI (Antigravity · Claude · Codex) 프리셋으로 복원하시겠습니까?', en: 'Restore the default 3 AI presets (Antigravity · Claude · Codex)?' },
-  loginFailedAlert: { ko: '로그인 실패: {error}', en: 'Login failed: {error}' },
 
   widgetTheme: { ko: '위젯 테마 디자인', en: 'Widget Theme' },
   theme1a: { ko: '1a. 바 게이지', en: '1a. Bar Gauge' },

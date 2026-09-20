@@ -2,7 +2,6 @@ export const IPC_CHANNELS = {
   GET_STATE: 'app:get-state',
   UPDATE_CONFIG: 'app:update-config',
   REFRESH_QUOTA: 'app:refresh-quota',
-  ADD_GOOGLE_OAUTH: 'account:add-google-oauth',
   ADD_CUSTOM_ACCOUNT: 'account:add-custom-account',
   RESTORE_DETECTED_APP: 'account:restore-detected-app',
   RESET_DEFAULT_ACCOUNTS: 'account:reset-default-accounts',

@@ -5,7 +5,6 @@ import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, Tray } from 'el
 import { IPC_CHANNELS } from '../common/ipc-events.js'
 import type { AccountConfig, AppState, WidgetConfig } from '../common/types.js'
 import { AccountStore } from '../services/account-store.js'
-import { GoogleOAuthService } from '../services/google-oauth.js'
 import { QuotaManager } from '../services/quota-manager.js'
 import { calculatePopupPosition, calculateWidgetPosition, getTaskbarInfo } from './taskbar-position.js'
 import { LocalAppDetector } from '../services/local-app-detector.js'
@@ -473,29 +472,6 @@ function updateTrayMenu() {
         quotaManager.refreshAll().then(() => broadcastState())
       }
     },
-    {
-      label: t('trayAddGoogle'),
-      click: async () => {
-        const res = await GoogleOAuthService.startLogin()
-        if (res.success && res.email) {
-          accountStore.addAccount({
-            id: `google-${Date.now()}`,
-            name: res.email.split('@')[0],
-            provider: 'google',
-            enabled: true,
-            tokens: {
-              accessToken: res.accessToken!,
-              refreshToken: res.refreshToken || '',
-              expiresAt: res.expiresAt || Date.now() + 3600000,
-              email: res.email,
-              projectId: res.projectId
-            }
-          })
-          await quotaManager.refreshAll()
-          broadcastState()
-        }
-      }
-    },
     { type: 'separator' },
     {
       label: t('trayQuit'),
@@ -565,33 +541,6 @@ function setupIpcHandlers() {
     await quotaManager.refreshAll()
     broadcastState()
     return getAppState()
-  })
-
-  ipcMain.handle(IPC_CHANNELS.ADD_GOOGLE_OAUTH, async () => {
-    try {
-      const res = await GoogleOAuthService.startLogin()
-      if (res.success && res.email) {
-        accountStore.addAccount({
-          id: `google-${Date.now()}`,
-          name: res.email.split('@')[0],
-          provider: 'google',
-          enabled: true,
-          tokens: {
-            accessToken: res.accessToken!,
-            refreshToken: res.refreshToken || '',
-            expiresAt: res.expiresAt || Date.now() + 3600000,
-            email: res.email,
-            projectId: res.projectId
-          }
-        })
-        await quotaManager.refreshAll()
-        broadcastState()
-        return { success: true }
-      }
-      return { success: false, error: res.error || 'Login canceled or failed' }
-    } catch (e) {
-      return { success: false, error: String(e) }
-    }
   })
 
   ipcMain.handle(IPC_CHANNELS.ADD_CUSTOM_ACCOUNT, (_event, acc: Partial<AccountConfig>) => {

@@ -24,9 +24,6 @@
   ],
   "author": "Antigravity",
   "license": "MIT",
-  "dependencies": {
-    "open": "^10.1.0"
-  },
   "devDependencies": {
     "@types/node": "^22.13.9",
     "electron": "^34.2.0",

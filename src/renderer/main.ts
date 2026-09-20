@@ -171,7 +171,6 @@ if (!(window as any).api) {
       return mockState
     },
     refreshQuota: async () => mockState,
-    addGoogleAccount: async () => ({ success: true }),
     addCustomAccount: async () => mockState,
     restoreDetectedApp: async (app: any) => {
       if (!mockState.accounts.some(a => a.id === app.id)) {

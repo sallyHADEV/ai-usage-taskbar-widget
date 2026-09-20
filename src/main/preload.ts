@@ -6,7 +6,6 @@ export const api = {
   getState: (): Promise<AppState> => ipcRenderer.invoke(IPC_CHANNELS.GET_STATE),
   updateConfig: (patch: Partial<WidgetConfig>): Promise<AppState> => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_CONFIG, patch),
   refreshQuota: (): Promise<AppState> => ipcRenderer.invoke(IPC_CHANNELS.REFRESH_QUOTA),
-  addGoogleAccount: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke(IPC_CHANNELS.ADD_GOOGLE_OAUTH),
   addCustomAccount: (account: Partial<AccountConfig>): Promise<AppState> => ipcRenderer.invoke(IPC_CHANNELS.ADD_CUSTOM_ACCOUNT, account),
   restoreDetectedApp: (app: any): Promise<AppState> => ipcRenderer.invoke(IPC_CHANNELS.RESTORE_DETECTED_APP, app),
   resetDefaultAccounts: (): Promise<AppState> => ipcRenderer.invoke(IPC_CHANNELS.RESET_DEFAULT_ACCOUNTS),
