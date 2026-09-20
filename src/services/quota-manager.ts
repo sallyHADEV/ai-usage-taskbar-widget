@@ -1,6 +1,4 @@
-import { CloudCodeClient } from './cloudcode-client.js'
-import { LocalLspClient } from './local-lsp-client.js'
-import { AntigravityCloudClient } from './antigravity-cloud-client.js'
+import { AntigravityCliClient } from './antigravity-cli-client.js'
 import { ClaudeLocalClient } from './claude-local-client.js'
 import { CodexLocalClient } from './codex-local-client.js'
 import { AccountStore } from './account-store.js'
@@ -8,6 +6,8 @@ import type { AccountConfig, AccountUsage } from '../common/types.js'
 
 export class QuotaManager {
   private usages: Map<string, AccountUsage> = new Map()
+  // ponytail: 메모리 캐시만 (앱 재시작 시 소실), 필요하면 userData에 JSON 저장
+  private lastGood: Map<string, AccountUsage> = new Map()
   private timer: NodeJS.Timeout | null = null
   private isRefreshing: boolean = false
   private onStateChangeListeners: Array<(usages: AccountUsage[]) => void> = []
@@ -116,28 +116,21 @@ export class QuotaManager {
 
             // 실시간 로컬/API 세션 우선 조회
             if (acc.provider === 'antigravity' || acc.isLocalIde) {
-              usage = await LocalLspClient.fetchLocalUsage(acc)
-              // IDE 미실행(목업 모드 또는 에러) 시에만 AntigravityCloudClient로 실시간 클라우드 세션 조회 시도
-              if (!usage || usage.status === 'error' || usage.tier?.includes('목업') || usage.tier?.includes('로컬 대기')) {
-                try {
-                  const cloudUsage = await AntigravityCloudClient.fetchUsage(acc)
-                  if (cloudUsage && cloudUsage.status === 'ready') {
-                    usage = cloudUsage
-                  }
-                } catch (cloudErr) {
-                  console.warn('[QuotaManager] AntigravityCloudClient fallback error:', cloudErr)
-                }
+              // agy CLI가 기존 로그인 세션으로 조회 (RPC 포트/CSRF/토큰을 다루지 않음)
+              usage = await AntigravityCliClient.fetchUsage(acc)
+              // 목업 대신 정직한 상태: 마지막 실측값(시각 유지) 또는 에러 안내
+              if (usage.status === 'ready') {
+                this.lastGood.set(acc.id, usage)
+              } else {
+                const last = this.lastGood.get(acc.id)
+                if (last) usage = { ...last, tier: `${last.tier ?? ''} (마지막 실측)`.trim() }
               }
+              this.usages.set(acc.id, usage)
+              return
             } else if (acc.provider === 'claude') {
               usage = await ClaudeLocalClient.fetchUsage(acc)
             } else if (acc.provider === 'codex') {
               usage = await CodexLocalClient.fetchUsage(acc)
-            } else if (acc.tokens || acc.provider === 'google') {
-              try {
-                usage = await CloudCodeClient.fetchAccountUsage(acc)
-              } catch (err) {
-                console.warn(`[QuotaManager] CloudCodeClient error for ${acc.name}:`, err)
-              }
             }
 
             // 실시간 조회가 실패했거나 미지원 계정인 경우에만 customMock 폴백 사용

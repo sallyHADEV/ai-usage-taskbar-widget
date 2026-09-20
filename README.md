@@ -1,6 +1,6 @@
 # Taskbar AI Token Usage Widget (작업표시줄 AI 토큰 사용량 모니터 위젯)
 
-Windows 작업표시줄 상에 위치하여 복수의 AI 계정(Google Cloud Code / Antigravity, Claude, 커스텀 AI)의 5시간 세션 쿼터 및 주간 사용량, 리셋 카운트다운을 실시간으로 모니터링하는 초경량 데스크톱 위젯입니다.
+Windows 작업표시줄 상에 위치하여 복수의 AI 계정(Antigravity, Claude, Codex, 커스텀 AI)의 5시간 세션 쿼터 및 주간 사용량, 리셋 카운트다운을 실시간으로 모니터링하는 초경량 데스크톱 위젯입니다.
 
 ![스크린샷](img/01.png)
 
@@ -31,8 +31,7 @@ Windows 작업표시줄 상에 위치하여 복수의 AI 계정(Google Cloud Cod
    - 3단계 임계값 색상 동적 전환 (0~59% 정상 그린 &rarr; 60~84% 주의 오렌지 &rarr; 85~100% 경고 레드).
 
 5. **계정 기반 인증 & 다중 계정 무제한 관리**:
-   - **Google OAuth 2.0 연동**: 브라우저 원클릭 로그인을 통해 토큰을 안전하게 획득하고, 만료 시 자동 갱신.
-   - **Antigravity 하이브리드 연동**: IDE 실행 중일 때는 로컬 언어 서버(LSP) 프로세스를 감지하여 초고속 동기화하고, IDE 종료 상태에서는 로컬 세션 토큰을 통해 Google Cloud Code API로 실시간 쿼터를 연속 추적.
+   - **Antigravity 연동 (무인증)**: 이미 로그인된 `agy` CLI를 브리지로 사용합니다. `agy -p "/usage" --output-format json`(읽기 전용, 쿼터 소비 없음)의 결과를 파싱하므로 앱이 계정·토큰·키를 다루지 않습니다. `agy` CLI 1.1.11 이상이 필요하며, CLI가 없거나 응답이 없으면 마지막 실측값 또는 오류 상태를 표시합니다.
    - **커스텀/목 계정 지원**: 원하는 만큼 계정 추가/비활성화 토글/삭제 가능.
 
 6. **마우스 호버 & 클릭 시 디테일 팝업창 (모션 애니메이션)**:
@@ -60,11 +59,8 @@ GitHub 저장소 우측의 **Releases** 탭에서 최신 버전의 `AI-Usage-Wid
 npm install
 ```
 
-#### 환경변수 설정 (선택 사항)
-Google Cloud Code / Antigravity 클라우드 연동을 직접 커스텀 OAuth로 구성하려면 `.env.example`을 복사하여 `.env`를 생성하고 키를 입력합니다:
-```bash
-cp .env.example .env
-```
+#### 환경변수 (선택 사항)
+Codex 실행 파일이 기본 경로에 없다면 시스템 환경변수 `CODEX_EXECUTABLE`에 경로를 지정합니다. (`.env.example` 참고)
 
 #### 빌드 및 실행
 ```bash

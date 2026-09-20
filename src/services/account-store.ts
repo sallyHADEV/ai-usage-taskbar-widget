@@ -101,6 +101,7 @@ export class AccountStore {
 
     this.configPath = path.join(baseDir, 'config.json')
     this.accountsPath = path.join(baseDir, 'accounts.json')
+    fs.rmSync(path.join(baseDir, 'oauth-client.json'), { force: true }) // 제거된 키 가져오기 기능의 잔여 파일
 
     this.config = this.loadConfig()
     this.accounts = this.loadAccounts()
@@ -124,7 +125,12 @@ export class AccountStore {
         const raw = fs.readFileSync(this.accountsPath, 'utf-8')
         const parsed = JSON.parse(raw)
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed
+          // 제거된 Google 로그인 기능이 남긴 계정(리프레시 토큰 포함)을 디스크에서 삭제
+          const kept = parsed.filter((a: { provider?: string; tokens?: unknown }) => a.provider !== 'google' && !a.tokens)
+          if (kept.length !== parsed.length) {
+            this.atomicWriteFileSync(this.accountsPath, JSON.stringify(kept, null, 2))
+          }
+          return kept.length > 0 ? kept : [...DEFAULT_ACCOUNTS]
         }
       }
     } catch (err) {
@@ -169,7 +175,7 @@ export class AccountStore {
   }
 
   public addAccount(account: AccountConfig): void {
-    const existingIndex = this.accounts.findIndex(a => a.id === account.id || (account.tokens?.email && a.tokens?.email === account.tokens.email))
+    const existingIndex = this.accounts.findIndex(a => a.id === account.id)
     if (existingIndex >= 0) {
       this.accounts[existingIndex] = { ...this.accounts[existingIndex], ...account, enabled: true }
     } else {

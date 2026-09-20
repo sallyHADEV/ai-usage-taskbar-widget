@@ -181,7 +181,7 @@ function renderAccountsTab(state: AppState): string {
           ${renderAiIcon(acc.provider, acc.name, state.config.iconStyle, 20)}
           <div>
             <div style="font-weight: 600; font-size: 11px;">${acc.name}</div>
-            <div style="font-size: 9px; color: var(--text-dim);">${acc.tokens?.email || (acc.isLocalIde ? t('localIdeNoAuth') : acc.provider.toUpperCase())}</div>
+            <div style="font-size: 9px; color: var(--text-dim);">${acc.isLocalIde ? t('localIdeNoAuth') : acc.provider.toUpperCase()}</div>
           </div>
         </div>
         <div style="display: flex; align-items: center; gap: 5px;">
@@ -262,10 +262,7 @@ function renderAccountsTab(state: AppState): string {
   ` : `
     <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 10px;">
       <div style="display: flex; gap: 8px;">
-        <button class="btn-primary" id="btn-add-google" style="flex: 1;">
-          <span>${t('addGoogleOAuth')}</span>
-        </button>
-        <button class="btn-secondary" id="btn-show-custom-form">
+        <button class="btn-secondary" id="btn-show-custom-form" style="flex: 1;">
           ${t('addManually')}
         </button>
       </div>
@@ -553,13 +550,6 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
     }
     renderPopupView(container, state)
     window.api.refreshQuota()
-  })
-
-  container.querySelector('#btn-add-google')?.addEventListener('click', async () => {
-    const res = await window.api.addGoogleAccount()
-    if (!res.success && res.error) {
-      alert(t('loginFailedAlert', { error: res.error }))
-    }
   })
 
   container.querySelector('#btn-show-custom-form')?.addEventListener('click', () => {
