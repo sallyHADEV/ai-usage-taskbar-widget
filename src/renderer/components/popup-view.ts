@@ -1,5 +1,5 @@
 import { parseUsageColor } from '../../common/time-utils.js'
-import type { AccountConfig, AppState, ThemeType, WidgetConfig } from '../../common/types.js'
+import type { AccountConfig, AccountUsage, AppState, ThemeType, WidgetConfig } from '../../common/types.js'
 import { renderAiIcon } from './ai-icons.js'
 import { t } from '../../common/i18n.js'
 
@@ -72,6 +72,26 @@ function renderTabContent(state: AppState): string {
   return renderSettingsTab(state)
 }
 
+function badgeClass(u: AccountUsage): string {
+  if (u.status === 'error' || u.status === 'unauthenticated') return 'error'
+  if (u.status === 'stale') return 'stale'
+  if (u.isEstimated) return 'estimated'
+  return ''
+}
+
+// 카드 부제: 정상 실측일 때만 '실시간 모니터링 중'. 그 외에는 왜 믿을 수 없는 값인지 밝힌다
+function statusLine(u: AccountUsage): string {
+  if (u.status === 'error' || u.status === 'unauthenticated') {
+    return u.errorMessage || t('statusUnavailable')
+  }
+  if (u.status === 'stale') {
+    return t('statusStale', { time: new Date(u.updatedAt).toLocaleString() })
+  }
+  if (u.status === 'loading') return t('statusLoading')
+  if (u.isEstimated) return `${t('statusEstimated')}${u.email ? ` · ${u.email}` : ''}`
+  return u.email || u.projectId || t('realtimeMonitoring')
+}
+
 function renderUsageTab(state: AppState): string {
   if (state.usages.length === 0) {
     return `
@@ -128,10 +148,10 @@ function renderUsageTab(state: AppState): string {
             ${iconHtml}
             <div>
               <div class="card-account-name">${u.name}</div>
-              <div class="card-account-email">${u.email || u.projectId || (u.status === 'error' ? u.errorMessage : t('realtimeMonitoring'))}</div>
+              <div class="card-account-email">${statusLine(u)}</div>
             </div>
           </div>
-          <span class="card-badge ${u.status === 'error' ? 'error' : ''}">${u.tier || u.status}</span>
+          <span class="card-badge ${badgeClass(u)}">${u.tier || u.status}</span>
         </div>
 
         <div class="card-quota-grid">

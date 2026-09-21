@@ -91,6 +91,7 @@ export class CodexLocalClient {
     let weeklyPercent = 0
     let resetCountdown = '--'
     let latestModel = 'gpt-5.6-terra'
+    let sqliteRead = false
 
     for (const dbPath of candidateSqlitePaths) {
       if (fs.existsSync(dbPath)) {
@@ -146,6 +147,7 @@ export class CodexLocalClient {
                   resetCountdown = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
                 }
               }
+              sqliteRead = true
             } finally {
               try {
                 db.close()
@@ -159,9 +161,15 @@ export class CodexLocalClient {
       }
     }
 
+    // DB를 못 읽으면 sessionPercent/weeklyPercent 가 0으로 남아 "쿼터 가득 남음"처럼 보인다 — 그건 실패로 보고한다
+    if (!sqliteRead) {
+      return this.getFallback(account, 'Codex 사용량 DB(state_5.sqlite)를 읽지 못했습니다')
+    }
+
     const isPro = plan.toLowerCase().includes('pro')
     const isWeeklyOnly = isPro
 
+    // 공식 app-server 가 아니라 토큰 수를 고정 예산(3h 20만 / 주 200만)으로 나눈 추정치다. 실측으로 위장하지 않는다
     const result: AccountUsage = {
       id: account.id,
       name: account.name || 'Codex CLI',
@@ -169,8 +177,9 @@ export class CodexLocalClient {
       iconLetter: 'X',
       brandColor: '#6366F1',
       email: email || undefined,
-      tier: `${plan} (로컬 세션)`,
+      tier: `${plan} (로컬 추정)`,
       status: 'ready',
+      isEstimated: true,
       isWeeklyOnly,
       primaryQuota: {
         remainingFraction: (100 - (isWeeklyOnly ? weeklyPercent : sessionPercent)) / 100,
@@ -207,33 +216,8 @@ export class CodexLocalClient {
     return result
   }
 
+  // 조회 실패는 항상 error (claude-local-client 와 동일 원칙: 프리셋 숫자로 정상값을 위장하지 않는다)
   private static getFallback(account: AccountConfig, reason: string): AccountUsage {
-    if (account.customMock) {
-      return {
-        id: account.id,
-        name: account.name,
-        provider: 'codex',
-        iconLetter: 'X',
-        brandColor: '#6366F1',
-        status: 'ready',
-        primaryQuota: {
-          remainingFraction: (100 - account.customMock.primaryPercent) / 100,
-          percentLeft: 100 - account.customMock.primaryPercent,
-          percentUsed: account.customMock.primaryPercent,
-          resetCountdown: account.customMock.primaryReset,
-          isExhausted: false
-        },
-        weeklyQuota: {
-          remainingFraction: (100 - account.customMock.weeklyPercent) / 100,
-          percentLeft: 100 - account.customMock.weeklyPercent,
-          percentUsed: account.customMock.weeklyPercent,
-          resetCountdown: account.customMock.weeklyReset,
-          isExhausted: false
-        },
-        updatedAt: new Date().toISOString()
-      }
-    }
-
     return {
       id: account.id,
       name: account.name || 'Codex CLI',

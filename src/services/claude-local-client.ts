@@ -127,33 +127,8 @@ export class ClaudeLocalClient {
     })
   }
 
+  // 조회 실패는 항상 error. customMock(프리셋 숫자)으로 정상값을 위장하지 않는다 — 사용량 모니터에서 가짜 수치는 오답보다 나쁘다
   private static getFallback(account: AccountConfig, reason: string): AccountUsage {
-    if (account.customMock) {
-      return {
-        id: account.id,
-        name: account.name,
-        provider: 'claude',
-        iconLetter: 'C',
-        brandColor: '#D97757',
-        status: 'ready',
-        primaryQuota: {
-          remainingFraction: (100 - account.customMock.primaryPercent) / 100,
-          percentLeft: 100 - account.customMock.primaryPercent,
-          percentUsed: account.customMock.primaryPercent,
-          resetCountdown: account.customMock.primaryReset,
-          isExhausted: false
-        },
-        weeklyQuota: {
-          remainingFraction: (100 - account.customMock.weeklyPercent) / 100,
-          percentLeft: 100 - account.customMock.weeklyPercent,
-          percentUsed: account.customMock.weeklyPercent,
-          resetCountdown: account.customMock.weeklyReset,
-          isExhausted: false
-        },
-        updatedAt: new Date().toISOString()
-      }
-    }
-
     return {
       id: account.id,
       name: account.name || 'Claude Code',

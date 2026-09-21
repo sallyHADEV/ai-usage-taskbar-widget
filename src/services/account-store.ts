@@ -21,65 +21,34 @@ const DEFAULT_CONFIG: WidgetConfig = {
   openAtLogin: true
 }
 
+// 쿼터 수치는 전부 실시간 조회로 채운다. 프리셋 숫자를 넣어두면 조회 실패 시 그게 정상값처럼 표시된다.
+// (실시간 조회 클라이언트가 없는 provider 는 기본 계정에 두지 않는다 — loadAccounts 도 'google' 계정을 정리한다)
 export const DEFAULT_ACCOUNTS: AccountConfig[] = [
   {
     id: 'local-antigravity',
     name: 'Antigravity (Local IDE)',
     provider: 'antigravity',
     enabled: true,
-    isLocalIde: true,
-    customMock: {
-      primaryPercent: 79,
-      primaryReset: '4h 49m',
-      weeklyPercent: 44,
-      weeklyReset: '5d 8h',
-      iconLetter: 'A',
-      brandColor: '#2563EB'
-    }
+    isLocalIde: true
   },
   {
     id: 'local-claude-code',
     name: 'Claude Code',
     provider: 'claude',
-    enabled: true,
-    customMock: {
-      primaryPercent: 43,
-      primaryReset: '3h 12m',
-      weeklyPercent: 39,
-      weeklyReset: '5d 12h',
-      iconLetter: 'C',
-      brandColor: '#D97757'
-    }
+    enabled: true
   },
   {
     id: 'local-codex',
     name: 'Codex CLI',
     provider: 'codex',
-    enabled: true,
-    customMock: {
-      primaryPercent: 1,
-      primaryReset: '1h 27m',
-      weeklyPercent: 47,
-      weeklyReset: '6d 4h',
-      iconLetter: 'X',
-      brandColor: '#6366F1'
-    }
-  },
-  {
-    id: 'google-gemini',
-    name: 'Gemini Advanced',
-    provider: 'google',
-    enabled: true,
-    customMock: {
-      primaryPercent: 4,
-      primaryReset: '4h 53m',
-      weeklyPercent: 3,
-      weeklyReset: '6d 18h',
-      iconLetter: 'G',
-      brandColor: '#4E82EE'
-    }
+    enabled: true
   }
 ]
+
+/** DEFAULT_ACCOUNTS 는 상수다. toggleAccount 등이 원본을 바꾸지 않도록 항상 깊은 복사본을 준다 */
+function createDefaultAccounts(): AccountConfig[] {
+  return structuredClone(DEFAULT_ACCOUNTS)
+}
 
 export class AccountStore {
   private configPath: string
@@ -130,13 +99,13 @@ export class AccountStore {
           if (kept.length !== parsed.length) {
             this.atomicWriteFileSync(this.accountsPath, JSON.stringify(kept, null, 2))
           }
-          return kept.length > 0 ? kept : [...DEFAULT_ACCOUNTS]
+          return kept.length > 0 ? kept : createDefaultAccounts()
         }
       }
     } catch (err) {
       console.error('[AccountStore] Failed to load accounts, using defaults', err)
     }
-    return [...DEFAULT_ACCOUNTS]
+    return createDefaultAccounts()
   }
 
   private atomicWriteFileSync(filePath: string, content: string): void {
@@ -184,59 +153,21 @@ export class AccountStore {
     this.saveAccounts(this.accounts)
   }
 
+  /** 감지된 로컬 앱을 계정으로 등록. 쿼터는 실시간 조회로만 채운다 (프리셋 숫자를 넣지 않는다) */
   public restoreDetectedAccount(app: DetectedApp): void {
-    let mockData = {
-      primaryPercent: 45,
-      primaryReset: '3h 15m',
-      weeklyPercent: 25,
-      weeklyReset: '4d 10h',
-      iconLetter: app.iconLetter,
-      brandColor: app.brandColor
-    }
-
-    if (app.id === 'local-antigravity') {
-      mockData = {
-        primaryPercent: 37,
-        primaryReset: '3h 28m',
-        weeklyPercent: 12,
-        weeklyReset: '5d 14h',
-        iconLetter: 'A',
-        brandColor: '#2563EB'
-      }
-    } else if (app.id === 'local-claude-code') {
-      mockData = {
-        primaryPercent: 68,
-        primaryReset: '2h 41m',
-        weeklyPercent: 42,
-        weeklyReset: '3d 9h',
-        iconLetter: 'C',
-        brandColor: '#D97757'
-      }
-    } else if (app.id === 'local-codex') {
-      mockData = {
-        primaryPercent: 54,
-        primaryReset: '1h 50m',
-        weeklyPercent: 38,
-        weeklyReset: '4d 20h',
-        iconLetter: 'X',
-        brandColor: '#6366F1'
-      }
-    }
-
     const acc: AccountConfig = {
       id: app.id,
       name: app.name,
       provider: app.provider as any,
       enabled: true,
-      isLocalIde: app.id === 'local-antigravity',
-      customMock: mockData
+      isLocalIde: app.id === 'local-antigravity'
     }
 
     this.addAccount(acc)
   }
 
   public resetToDefaultAccounts(): void {
-    this.accounts = [...DEFAULT_ACCOUNTS]
+    this.accounts = createDefaultAccounts()
     this.saveAccounts(this.accounts)
   }
 

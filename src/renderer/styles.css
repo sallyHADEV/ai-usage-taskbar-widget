@@ -664,6 +664,30 @@ body.is-widget-view #app {
   color: #fb7185;
 }
 
+/* 실측이 끊겼거나(stale) 추정치(estimated)인 카드: 정상 실측과 색으로 구분 */
+.card-badge.stale {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.card-badge.estimated {
+  background: rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+}
+
+/* 위젯 바: 쿼터 숫자를 그릴 수 없는 계정 */
+.account-item.is-unavailable .unavailable-mark {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fb7185;
+}
+
+.account-item.is-unavailable.is-loading .unavailable-mark {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
 .card-quota-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

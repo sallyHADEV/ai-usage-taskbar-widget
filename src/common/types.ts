@@ -28,8 +28,11 @@ export interface AccountUsage {
   email?: string
   tier?: string
   projectId?: string
-  status: 'ready' | 'loading' | 'error' | 'unauthenticated'
+  // 'stale' = 마지막 성공 실측값을 그대로 보여주는 중 (갱신 실패). updatedAt은 그 실측 시각을 유지한다
+  status: 'ready' | 'loading' | 'error' | 'unauthenticated' | 'stale'
   errorMessage?: string
+  // 실측이 아니라 추정/수동 입력값임을 표시 (Codex SQLite 토큰 추정, 사용자가 직접 넣은 custom 계정)
+  isEstimated?: boolean
   primaryQuota: QuotaInfo // 5시간 또는 기본 한도
   weeklyQuota?: QuotaInfo // 주간 한도
   isWeeklyOnly?: boolean // ChatGPT Pro 등 5시간 세션 쿼터 없이 1주일 쿼터만 존재하는 계정 여부
