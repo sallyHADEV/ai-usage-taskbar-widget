@@ -67,10 +67,19 @@ export class AntigravityCliClient {
   /** 읽기 전용 슬래시 명령: 에이전트 턴/쿼터 소비/대화 생성 없이 JSON만 반환 (CLI >= 1.1.11) */
   private static runUsage(agyPath: string): Promise<AgyUsageResponse> {
     return new Promise((resolve, reject) => {
+      // agy 는 조회 중에 자기 자신의 백그라운드 업데이터(`agy --bg-updater` -> `agy --version`)를 띄우는데,
+      // 그 자식은 부모의 숨김 콘솔에서 떨어져 나오므로 windowsHide 로는 막을 수 없고 터미널 창이 깜박인다.
+      // 이 환경변수는 우리가 띄우는 agy 프로세스에만 적용되고 사용자의 대화형 agy 세션에는 영향이 없다.
       execFile(
         agyPath,
         ['-p', '/usage', '--output-format', 'json'],
-        { windowsHide: true, shell: false, timeout: CLI_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+        {
+          windowsHide: true,
+          shell: false,
+          timeout: CLI_TIMEOUT_MS,
+          maxBuffer: 1024 * 1024,
+          env: { ...process.env, AGY_CLI_DISABLE_AUTO_UPDATE: 'true' }
+        },
         (error, stdout, stderr) => {
           if (error) {
             const e = error as NodeJS.ErrnoException & { killed?: boolean }
