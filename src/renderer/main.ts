@@ -3,8 +3,16 @@ import { renderTheme1a } from './components/theme-1a.js'
 import { renderTheme1b } from './components/theme-1b.js'
 import { renderTheme1c } from './components/theme-1c.js'
 import { renderTheme1d } from './components/theme-1d.js'
-import type { AppState } from '../common/types.js'
+import { renderAiIcon } from './components/ai-icons.js'
+import type { AccountUsage, AppState, WidgetConfig } from '../common/types.js'
 import { detectLang, setLang, t } from '../common/i18n.js'
+
+// title 속성에 들어가는 계정명/에러문구는 외부 프로세스 출력이거나 사용자 입력이다
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!
+  )
+}
 
 const lang = detectLang(navigator.language)
 setLang(lang)
@@ -35,6 +43,19 @@ function updateVerticalOffset(offsetPx?: number) {
   document.documentElement.style.setProperty('--vertical-offset', `${offsetPx || 0}px`)
 }
 
+// 쿼터 숫자 대신 상태만 보여준다 (숫자를 그리면 실패가 "여유 있음"으로 읽힌다)
+function renderUnavailable(u: AccountUsage, config: WidgetConfig): string {
+  const iconHtml = renderAiIcon(u.provider, u.name, config.iconStyle, 18)
+  const loading = u.status === 'loading'
+  const tooltip = escapeHtml(`${u.name}: ${loading ? t('statusLoading') : (u.errorMessage || t('statusUnavailable'))}`)
+  return `
+    <div class="account-item is-unavailable ${loading ? 'is-loading' : ''}" data-account-id="${escapeHtml(u.id)}" title="${tooltip}">
+      ${iconHtml}
+      <span class="unavailable-mark">${loading ? '···' : '!'}</span>
+    </div>
+  `
+}
+
 function renderWidget(state: AppState) {
   currentState = state
   updateRootAlpha(state.config.alphaPercent)
@@ -51,6 +72,11 @@ function renderWidget(state: AppState) {
     `
   } else {
     accountsHtml = activeUsages.map((u) => {
+      // 테마는 status 를 보지 않으므로, 실측값이 없는 계정을 그대로 넘기면 "100% 남음"이 표시된다.
+      // 4개 테마를 각각 고치는 대신 진입점에서 한 번 걸러낸다.
+      if (u.status === 'error' || u.status === 'unauthenticated' || u.status === 'loading') {
+        return renderUnavailable(u, state.config)
+      }
       switch (state.config.theme) {
         case '1b':
           return renderTheme1b(u, state.config)

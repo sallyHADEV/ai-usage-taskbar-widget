@@ -94,14 +94,22 @@ export class AntigravityCliClient {
   }
 
   private static quotaOf(fraction: number, resetTime?: string): QuotaInfo {
+    // percentLeft 를 먼저 구하고 percentUsed 는 그 보수로 계산해야 둘의 합이 항상 100이 된다
+    const percentLeft = Math.round(fraction * 100)
     return {
       remainingFraction: fraction,
-      percentLeft: Math.round(fraction * 100),
-      percentUsed: Math.round((1 - fraction) * 100),
+      percentLeft,
+      percentUsed: 100 - percentLeft,
       resetTime,
       resetCountdown: formatCountdown(resetTime),
       isExhausted: fraction <= 0.01
     }
+  }
+
+  /** 0~1 범위의 유효한 수치일 때만 반환. 필드 누락/스키마 변경을 '100% 남음'으로 해석하지 않는다 */
+  private static fracOf(b: AgyBucket): number | null {
+    const v = b.remaining_fraction
+    return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : null
   }
 
   /** agy JSON → 기존 내부 AccountUsage (UI는 agy의 원본 구조를 모른다) */
@@ -115,27 +123,40 @@ export class AntigravityCliClient {
       throw new AgyError('ANTIGRAVITY_QUOTA_UNAVAILABLE')
     }
 
-    // 헤드라인: 모든 그룹의 버킷 중 가장 빠듯한 값 (5시간 / 주간)
-    let primary: AgyBucket | undefined
-    let weekly: AgyBucket | undefined
+    // 헤드라인: 모든 그룹의 버킷 중 가장 빠듯한 값 (5시간 / 주간). 수치가 없는 버킷은 건너뛴다
+    let primary: { b: AgyBucket; f: number } | undefined
+    let weekly: { b: AgyBucket; f: number } | undefined
     const models: ModelQuotaDetail[] = []
-    const frac = (b: AgyBucket) => b.remaining_fraction ?? 1
 
     for (const g of groups) {
-      let tightest: AgyBucket | undefined
+      let tightest: { b: AgyBucket; f: number } | undefined
       for (const b of g.buckets ?? []) {
-        if (!tightest || frac(b) < frac(tightest)) tightest = b
-        if (b.window === 'weekly' && (!weekly || frac(b) < frac(weekly))) weekly = b
-        else if (b.window === '5h' && (!primary || frac(b) < frac(primary))) primary = b
+        const f = this.fracOf(b)
+        if (f === null) continue
+        if (!tightest || f < tightest.f) tightest = { b, f }
+        if (b.window === 'weekly') {
+          if (!weekly || f < weekly.f) weekly = { b, f }
+        } else if (b.window === '5h') {
+          if (!primary || f < primary.f) primary = { b, f }
+        }
       }
       if (tightest) {
         models.push({
           modelId: g.name || 'group',
           displayName: g.name || 'Antigravity',
-          quota: this.quotaOf(frac(tightest), tightest.reset_time)
+          quota: this.quotaOf(tightest.f, tightest.b.reset_time)
         })
       }
     }
+
+    // 5h/weekly 중 아무것도 못 읽었으면 스키마가 바뀐 것이다 — 100% 남음으로 보이게 두지 않는다
+    if (!primary && !weekly) {
+      throw new AgyError('ANTIGRAVITY_QUOTA_PARSE_ERROR', '5h/weekly 버킷의 remaining_fraction 을 찾지 못했습니다')
+    }
+
+    // 5h 버킷이 없으면 주간 한도만 있는 계정으로 본다 (가짜 5h 100% 를 만들지 않는다)
+    const isWeeklyOnly = !primary
+    const head = primary ?? weekly!
 
     return {
       id: account.id,
@@ -145,8 +166,9 @@ export class AntigravityCliClient {
       brandColor: '#2563EB',
       tier: 'Antigravity CLI',
       status: 'ready',
-      primaryQuota: this.quotaOf(primary ? frac(primary) : 1, primary?.reset_time),
-      weeklyQuota: this.quotaOf(weekly ? frac(weekly) : 1, weekly?.reset_time),
+      isWeeklyOnly,
+      primaryQuota: this.quotaOf(head.f, head.b.reset_time),
+      weeklyQuota: weekly ? this.quotaOf(weekly.f, weekly.b.reset_time) : undefined,
       models,
       updatedAt: new Date().toISOString()
     }

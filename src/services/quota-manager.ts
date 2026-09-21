@@ -44,8 +44,19 @@ export class QuotaManager {
     return result
   }
 
+  /**
+   * customMock 이 정직한 데이터 소스인 계정인지.
+   * 사용자가 직접 수치를 입력해 만든 custom 계정에서만 참이고,
+   * 실계정(claude/codex/antigravity/google)의 프리셋 숫자는 실측을 대신할 수 없다.
+   */
+  private static isManualAccount(
+    acc: AccountConfig
+  ): acc is AccountConfig & { customMock: NonNullable<AccountConfig['customMock']> } {
+    return acc.provider === 'custom' && !!acc.customMock
+  }
+
   private createInitialUsage(acc: AccountConfig): AccountUsage {
-    if (acc.customMock) {
+    if (QuotaManager.isManualAccount(acc)) {
       const isWeeklyOnly = !!acc.customMock.isWeeklyOnly
       const primaryPct = isWeeklyOnly ? acc.customMock.weeklyPercent : acc.customMock.primaryPercent
       const primaryReset = isWeeklyOnly ? acc.customMock.weeklyReset : acc.customMock.primaryReset
@@ -57,6 +68,7 @@ export class QuotaManager {
         iconLetter: acc.customMock.iconLetter || acc.name.charAt(0).toUpperCase(),
         brandColor: acc.customMock.brandColor || '#3B82F6',
         status: 'ready',
+        isEstimated: true, // 사용자가 손으로 넣은 값이지 실측이 아니다
         isWeeklyOnly,
         primaryQuota: {
           remainingFraction: (100 - primaryPct) / 100,
@@ -123,7 +135,15 @@ export class QuotaManager {
                 this.lastGood.set(acc.id, usage)
               } else {
                 const last = this.lastGood.get(acc.id)
-                if (last) usage = { ...last, tier: `${last.tier ?? ''} (마지막 실측)`.trim() }
+                // status/updatedAt 을 그대로 두면 끊긴 갱신이 정상값으로 보인다. stale 로 낮추고 실측 시각은 유지
+                if (last) {
+                  usage = {
+                    ...last,
+                    status: 'stale',
+                    errorMessage: usage.errorMessage,
+                    tier: `${last.tier ?? ''} (마지막 실측)`.trim()
+                  }
+                }
               }
               this.usages.set(acc.id, usage)
               return
@@ -131,18 +151,15 @@ export class QuotaManager {
               usage = await ClaudeLocalClient.fetchUsage(acc)
             } else if (acc.provider === 'codex') {
               usage = await CodexLocalClient.fetchUsage(acc)
-            }
-
-            // 실시간 조회가 실패했거나 미지원 계정인 경우에만 customMock 폴백 사용
-            if (!usage || usage.status === 'error') {
-              if (acc.customMock) {
-                const mockUsage = this.createInitialUsage(acc)
-                if (usage?.errorMessage) {
-                  mockUsage.tier = `${mockUsage.tier || '목업'} (로컬 대기)`
-                }
-                usage = mockUsage
-              } else if (!usage) {
-                usage = this.createInitialUsage(acc)
+            } else if (QuotaManager.isManualAccount(acc)) {
+              // 실시간 조회 대상이 아닌 수동 입력 계정: 입력값이 곧 데이터
+              usage = this.createInitialUsage(acc)
+            } else {
+              // 실시간 조회 클라이언트가 없는 provider (예: google). 프리셋 숫자로 채우지 않는다
+              usage = {
+                ...this.createInitialUsage(acc),
+                status: 'error',
+                errorMessage: `${acc.provider} 실시간 쿼터 조회를 지원하지 않습니다`
               }
             }
 
