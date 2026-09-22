@@ -50,8 +50,6 @@ let widgetManuallyHidden = false // 트레이 메뉴로 사용자가 직접 숨�
 let widgetHiddenForFullscreen = false
 let popupHideTimer: NodeJS.Timeout | null = null
 let popupRevealTimer: NodeJS.Timeout | null = null
-let lastDockedWidgetClickAt = 0
-const DOUBLE_CLICK_WINDOW_MS = 500
 
 function getAppState(): AppState {
   return {
@@ -127,7 +125,7 @@ async function layoutWidget() {
     dockRepairPending = false
     TaskbarDocker.startDockWatcher(
       widgetWindow,
-      () => handleDockedWidgetClick(),
+      () => togglePopup(),
       () => {
         console.log('[Main] Explorer restart or dock lost detected, re-docking widget...')
         dockRepairPending = true
@@ -367,24 +365,6 @@ function hidePopup(force = false) {
   }
 }
 
-function handleDockedWidgetClick() {
-  const config = accountStore.getConfig()
-
-  if (config.doubleClickToOpenPopup !== true) {
-    lastDockedWidgetClickAt = 0
-    void togglePopup()
-    return
-  }
-
-  const now = Date.now()
-  if (lastDockedWidgetClickAt > 0 && now - lastDockedWidgetClickAt <= DOUBLE_CLICK_WINDOW_MS) {
-    lastDockedWidgetClickAt = 0
-    void togglePopup()
-  } else {
-    lastDockedWidgetClickAt = now
-  }
-}
-
 async function togglePopup() {
   cancelHidePopup()
   if (popupWindow && popupWindow.isVisible()) {
@@ -525,10 +505,6 @@ function setupIpcHandlers() {
     const prevConfig = accountStore.getConfig()
     const nextConfig: WidgetConfig = { ...prevConfig, ...patch }
     accountStore.saveConfig(nextConfig)
-
-    if (patch.doubleClickToOpenPopup !== undefined || patch.placementMode !== undefined) {
-      lastDockedWidgetClickAt = 0
-    }
 
     // 윈도우 시작 시 실행 설정 변경 시 적용
     if (patch.openAtLogin !== undefined && prevConfig.openAtLogin !== nextConfig.openAtLogin) {
