@@ -127,7 +127,7 @@ async function layoutWidget() {
     dockRepairPending = false
     TaskbarDocker.startDockWatcher(
       widgetWindow,
-      () => handleWidgetActivation('single', 'native'),
+      () => handleDockedWidgetClick(),
       () => {
         console.log('[Main] Explorer restart or dock lost detected, re-docking widget...')
         dockRepairPending = true
@@ -367,42 +367,21 @@ function hidePopup(force = false) {
   }
 }
 
-type WidgetActivation = 'single' | 'double'
-type WidgetActivationSource = 'renderer' | 'native'
-
-async function handleWidgetActivation(activation: WidgetActivation, source: WidgetActivationSource) {
+function handleDockedWidgetClick() {
   const config = accountStore.getConfig()
-  const isDocked = config.placementMode !== 'floating'
 
-  // 도킹 모드는 네이티브 워처, 플로팅 모드는 renderer 이벤트를 각각 단일 입력원으로 사용한다.
-  // 같은 물리 클릭이 양쪽 경로로 중복 전달되어 오작동하는 것을 방지한다.
-  if ((isDocked && source !== 'native') || (!isDocked && source !== 'renderer')) {
+  if (config.doubleClickToOpenPopup !== true) {
+    lastDockedWidgetClickAt = 0
+    void togglePopup()
     return
   }
 
-  if (config.doubleClickToOpenPopup === true) {
-    if (source === 'native') {
-      if (activation !== 'single') return
-
-      const now = Date.now()
-      if (lastDockedWidgetClickAt > 0 && now - lastDockedWidgetClickAt <= DOUBLE_CLICK_WINDOW_MS) {
-        lastDockedWidgetClickAt = 0
-        await togglePopup()
-      } else {
-        lastDockedWidgetClickAt = now
-      }
-      return
-    }
-
-    if (activation === 'double') {
-      await togglePopup()
-    }
-    return
-  }
-
-  lastDockedWidgetClickAt = 0
-  if (activation === 'single') {
-    await togglePopup()
+  const now = Date.now()
+  if (lastDockedWidgetClickAt > 0 && now - lastDockedWidgetClickAt <= DOUBLE_CLICK_WINDOW_MS) {
+    lastDockedWidgetClickAt = 0
+    void togglePopup()
+  } else {
+    lastDockedWidgetClickAt = now
   }
 }
 
@@ -650,8 +629,8 @@ function setupIpcHandlers() {
     hidePopup(true)
   })
 
-  ipcMain.handle(IPC_CHANNELS.TOGGLE_POPUP, async (_event, activation: WidgetActivation = 'single') => {
-    await handleWidgetActivation(activation, 'renderer')
+  ipcMain.handle(IPC_CHANNELS.TOGGLE_POPUP, async () => {
+    await togglePopup()
   })
 
   ipcMain.handle(IPC_CHANNELS.LOCK_POPUP, () => {
