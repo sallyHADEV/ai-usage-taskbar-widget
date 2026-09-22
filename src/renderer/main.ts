@@ -93,7 +93,7 @@ function renderWidget(state: AppState) {
 
   const showCard = state.config.showCardBackground ?? false
   const newHtml = `
-    <div class="widget-root ${isEmpty ? 'is-empty' : ''} ${showCard ? 'has-card-bg' : 'no-card-bg'}" id="widget-container" title="${t(state.config.doubleClickToOpenPopup ? 'widgetDoubleClickTitle' : 'widgetClickTitle')}">
+    <div class="widget-root ${isEmpty ? 'is-empty' : ''} ${showCard ? 'has-card-bg' : 'no-card-bg'}" id="widget-container" title="${t('widgetClickTitle')}">
       ${accountsHtml}
     </div>
   `
@@ -142,8 +142,7 @@ if (!(window as any).api) {
       alphaPercent: 85,
       showWeeklyLimit: true,
       colorByUsage: true,
-      showCardBackground: false,
-      doubleClickToOpenPopup: false
+      showCardBackground: false
     },
     accounts: [
       { id: 'local-antigravity', name: 'Google Antigravity', provider: 'antigravity', enabled: true },
@@ -276,34 +275,18 @@ async function init() {
       }
     })
   } else {
-    // 도킹 모드는 네이티브 워처가 클릭을 처리하고, 플로팅 모드만 renderer 이벤트를 사용한다.
-    // IPC 계약은 기존 togglePopup() 그대로 유지해 시작/프리로드 경로에 영향을 주지 않는다.
+    // 위젯 클릭 이벤트 시 팝업 토글 (중복 트리거 방지 디바운스 적용)
     let lastToggleTime = 0
-
-    const isFloatingWidget = () =>
-      currentState?.config.placementMode === 'floating'
-
-    const triggerSingleClick = (e: Event) => {
+    const triggerToggle = (e: Event) => {
       e.stopPropagation()
-      if (!isFloatingWidget() || currentState?.config.doubleClickToOpenPopup) return
-
       const now = Date.now()
       if (now - lastToggleTime < 300) return
       lastToggleTime = now
-      console.log('[Widget] Floating single click handled, invoking togglePopup')
+      console.log('[Widget] Click event handled, invoking togglePopup')
       window.api.togglePopup()
     }
 
-    const triggerDoubleClick = (e: Event) => {
-      e.stopPropagation()
-      if (!isFloatingWidget() || !currentState?.config.doubleClickToOpenPopup) return
-
-      console.log('[Widget] Floating double click handled, invoking togglePopup')
-      window.api.togglePopup()
-    }
-
-    appEl.addEventListener('click', triggerSingleClick)
-    appEl.addEventListener('dblclick', triggerDoubleClick)
+    appEl.addEventListener('click', triggerToggle)
   }
 
   const state = await window.api.getState()
