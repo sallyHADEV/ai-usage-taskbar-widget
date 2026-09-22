@@ -72,6 +72,7 @@ export interface WidgetConfig {
   alwaysOnTop?: boolean // '작업 표시줄 바로 위' 플로팅 모드 시 항상 위에 표시 여부 (기본: true)
   showCardBackground?: boolean // 배경 카드 박스 표시 여부 (false 시 완전 투명/작업표시줄 일체화)
   openAtLogin?: boolean // 윈도우 시작 시 자동 실행
+  doubleClickToOpenPopup?: boolean // true면 위젯 더블클릭으로만 상세 팝업 열기 (기본 false)
 }
 
 export interface AppState {

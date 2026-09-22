@@ -93,7 +93,7 @@ function renderWidget(state: AppState) {
 
   const showCard = state.config.showCardBackground ?? false
   const newHtml = `
-    <div class="widget-root ${isEmpty ? 'is-empty' : ''} ${showCard ? 'has-card-bg' : 'no-card-bg'}" id="widget-container" title="${t('widgetClickTitle')}">
+    <div class="widget-root ${isEmpty ? 'is-empty' : ''} ${showCard ? 'has-card-bg' : 'no-card-bg'}" id="widget-container" title="${t(state.config.doubleClickToOpenPopup ? 'widgetDoubleClickTitle' : 'widgetClickTitle')}">
       ${accountsHtml}
     </div>
   `
@@ -276,9 +276,15 @@ async function init() {
     })
   } else {
     // 위젯 클릭 이벤트 시 팝업 토글 (중복 트리거 방지 디바운스 적용)
+    // 도킹 모드는 네이티브 워처(main.ts)가 클릭을 처리하므로 여기서는 무시하고,
+    // 플로팅 모드에서만 click/dblclick 중 설정된 쪽으로 토글한다.
     let lastToggleTime = 0
+    const isFloating = () => currentState?.config.placementMode === 'floating'
+    const isDoubleClickMode = () => currentState?.config.doubleClickToOpenPopup === true
+
     const triggerToggle = (e: Event) => {
       e.stopPropagation()
+      if (!isFloating() || isDoubleClickMode()) return
       const now = Date.now()
       if (now - lastToggleTime < 300) return
       lastToggleTime = now
@@ -286,7 +292,15 @@ async function init() {
       window.api.togglePopup()
     }
 
+    const triggerDoubleClick = (e: Event) => {
+      e.stopPropagation()
+      if (!isFloating() || !isDoubleClickMode()) return
+      console.log('[Widget] Double-click event handled, invoking togglePopup')
+      window.api.togglePopup()
+    }
+
     appEl.addEventListener('click', triggerToggle)
+    appEl.addEventListener('dblclick', triggerDoubleClick)
   }
 
   const state = await window.api.getState()
