@@ -276,27 +276,30 @@ async function init() {
       }
     })
   } else {
-    // 위젯 클릭 방식은 설정에 따라 단일 클릭(기본) 또는 더블 클릭으로 동작한다.
-    // 도킹 모드에서는 메인 프로세스가 네이티브 워처 입력을 우선하므로,
-    // 여기서 전달된 renderer 입력은 플로팅 모드에서만 실제 토글에 사용된다.
+    // 도킹 모드는 네이티브 워처가 클릭을 처리하고, 플로팅 모드만 renderer 이벤트를 사용한다.
+    // IPC 계약은 기존 togglePopup() 그대로 유지해 시작/프리로드 경로에 영향을 주지 않는다.
     let lastToggleTime = 0
+
+    const isFloatingWidget = () =>
+      currentState?.config.placementMode === 'floating'
+
     const triggerSingleClick = (e: Event) => {
       e.stopPropagation()
-      if (currentState?.config.doubleClickToOpenPopup) return
+      if (!isFloatingWidget() || currentState?.config.doubleClickToOpenPopup) return
 
       const now = Date.now()
       if (now - lastToggleTime < 300) return
       lastToggleTime = now
-      console.log('[Widget] Single click handled, invoking togglePopup')
-      window.api.togglePopup('single')
+      console.log('[Widget] Floating single click handled, invoking togglePopup')
+      window.api.togglePopup()
     }
 
     const triggerDoubleClick = (e: Event) => {
       e.stopPropagation()
-      if (!currentState?.config.doubleClickToOpenPopup) return
+      if (!isFloatingWidget() || !currentState?.config.doubleClickToOpenPopup) return
 
-      console.log('[Widget] Double click handled, invoking togglePopup')
-      window.api.togglePopup('double')
+      console.log('[Widget] Floating double click handled, invoking togglePopup')
+      window.api.togglePopup()
     }
 
     appEl.addEventListener('click', triggerSingleClick)
