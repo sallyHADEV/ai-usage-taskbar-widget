@@ -93,7 +93,7 @@ function renderWidget(state: AppState) {
 
   const showCard = state.config.showCardBackground ?? false
   const newHtml = `
-    <div class="widget-root ${isEmpty ? 'is-empty' : ''} ${showCard ? 'has-card-bg' : 'no-card-bg'}" id="widget-container" title="${t(state.config.doubleClickToOpenPopup ? 'widgetDoubleClickTitle' : 'widgetClickTitle')}">
+    <div class="widget-root ${isEmpty ? 'is-empty' : ''} ${showCard ? 'has-card-bg' : 'no-card-bg'}" id="widget-container" title="${t('widgetClickTitle')}">
       ${accountsHtml}
     </div>
   `
@@ -142,8 +142,7 @@ if (!(window as any).api) {
       alphaPercent: 85,
       showWeeklyLimit: true,
       colorByUsage: true,
-      showCardBackground: false,
-      doubleClickToOpenPopup: false
+      showCardBackground: false
     },
     accounts: [
       { id: 'local-antigravity', name: 'Google Antigravity', provider: 'antigravity', enabled: true },
@@ -276,31 +275,18 @@ async function init() {
       }
     })
   } else {
-    // 위젯 클릭 방식은 설정에 따라 단일 클릭(기본) 또는 더블 클릭으로 동작한다.
-    // 도킹 모드에서는 메인 프로세스가 네이티브 워처 입력을 우선하므로,
-    // 여기서 전달된 renderer 입력은 플로팅 모드에서만 실제 토글에 사용된다.
+    // 위젯 클릭 이벤트 시 팝업 토글 (중복 트리거 방지 디바운스 적용)
     let lastToggleTime = 0
-    const triggerSingleClick = (e: Event) => {
+    const triggerToggle = (e: Event) => {
       e.stopPropagation()
-      if (currentState?.config.doubleClickToOpenPopup) return
-
       const now = Date.now()
       if (now - lastToggleTime < 300) return
       lastToggleTime = now
-      console.log('[Widget] Single click handled, invoking togglePopup')
-      window.api.togglePopup('single')
+      console.log('[Widget] Click event handled, invoking togglePopup')
+      window.api.togglePopup()
     }
 
-    const triggerDoubleClick = (e: Event) => {
-      e.stopPropagation()
-      if (!currentState?.config.doubleClickToOpenPopup) return
-
-      console.log('[Widget] Double click handled, invoking togglePopup')
-      window.api.togglePopup('double')
-    }
-
-    appEl.addEventListener('click', triggerSingleClick)
-    appEl.addEventListener('dblclick', triggerDoubleClick)
+    appEl.addEventListener('click', triggerToggle)
   }
 
   const state = await window.api.getState()

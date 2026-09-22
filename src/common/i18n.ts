@@ -71,8 +71,6 @@ const dict = {
   iconColor: { ko: '오리지널 컬러', en: 'Original Color' },
   iconMono: { ko: '채도 없음 (모노크롬)', en: 'Monochrome' },
   launchAtLogin: { ko: '윈도우 시작 시 자동 실행', en: 'Launch at Login' },
-  doubleClickPopupLabel: { ko: '더블 클릭으로 팝업 열기', en: 'Open Popup with Double-click' },
-  doubleClickPopupDesc: { ko: '켜면 위젯을 두 번 클릭해야 상세 팝업이 열립니다', en: 'When enabled, the details popup opens only after double-clicking the widget' },
   colorByUsageLabel: { ko: '사용량 임계값 색상 변화 (녹색 → 주황 → 빨강)', en: 'Color by Usage (Green → Orange → Red)' },
   showCardBg: { ko: '위젯 배경 카드 표시 (해제 시 완전 투명 일체화)', en: 'Show Background Card (off = fully transparent)' },
   showUsedPercentLabel: { ko: '작업표시줄 바 표시 방식 (소모량 %로 표시)', en: 'Taskbar Display Mode (show used %)' },
@@ -102,8 +100,7 @@ const dict = {
   widgetTooltipNoWeekly: { ko: '{name} | {p}% {unit} ({pr})', en: '{name} | {p}% {unit} ({pr})' },
   widgetTooltipWeeklyOnly: { ko: '{name} | 주간: {w}% {unit} ({wr})', en: '{name} | Weekly: {w}% {unit} ({wr})' },
   noAccountTitle: { ko: '연결된 AI 계정 없음 (클릭하여 계정 추가 또는 로컬 앱 감지)', en: 'No AI account connected (click to add or auto-detect)' },
-  widgetClickTitle: { ko: '클릭하여 상세 정보 및 설정 열기', en: 'Click for details and settings' },
-  widgetDoubleClickTitle: { ko: '더블 클릭하여 상세 정보 및 설정 열기', en: 'Double-click for details and settings' }
+  widgetClickTitle: { ko: '클릭하여 상세 정보 및 설정 열기', en: 'Click for details and settings' }
 } satisfies Record<string, Record<Lang, string>>
 
 export type I18nKey = keyof typeof dict

@@ -346,24 +346,6 @@ function renderSettingsTab(state: AppState): string {
         </label>
       </div>
 
-      <!-- 팝업 열기 클릭 방식 -->
-      <div class="form-group">
-        <label class="form-label switch-container" for="chk-double-click-popup">
-          <div>
-            <span>${t('doubleClickPopupLabel')}</span>
-            <div style="font-size: 9px; color: var(--text-muted); font-weight: 400;">
-              ${t('doubleClickPopupDesc')}
-            </div>
-          </div>
-          <div class="md-switch">
-            <input type="checkbox" id="chk-double-click-popup" ${cfg.doubleClickToOpenPopup ? 'checked' : ''} />
-            <div class="md-switch-track">
-              <div class="md-switch-thumb"></div>
-            </div>
-          </div>
-        </label>
-      </div>
-
       <!-- 사용량에 따른 색상 변화 -->
       <div class="form-group">
         <label class="form-label switch-container" for="chk-color-usage">
@@ -657,11 +639,6 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
   container.querySelector('#chk-open-at-login')?.addEventListener('change', (e) => {
     const checked = (e.target as HTMLInputElement).checked
     window.api.updateConfig({ openAtLogin: checked })
-  })
-
-  container.querySelector('#chk-double-click-popup')?.addEventListener('change', (e) => {
-    const checked = (e.target as HTMLInputElement).checked
-    window.api.updateConfig({ doubleClickToOpenPopup: checked })
   })
 
   container.querySelector('#chk-color-usage')?.addEventListener('change', (e) => {

@@ -14,7 +14,7 @@ export const api = {
   reorderAccount: (id: string, direction: 'up' | 'down'): Promise<AppState> => ipcRenderer.invoke(IPC_CHANNELS.REORDER_ACCOUNT, id, direction),
   showPopup: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.SHOW_POPUP),
   hidePopup: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.HIDE_POPUP),
-  togglePopup: (activation: 'single' | 'double' = 'single'): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.TOGGLE_POPUP, activation),
+  togglePopup: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.TOGGLE_POPUP),
   lockPopup: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.LOCK_POPUP),
   unlockPopup: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.UNLOCK_POPUP),
   resizeWidget: (width: number, height: number): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.RESIZE_WIDGET, width, height),
