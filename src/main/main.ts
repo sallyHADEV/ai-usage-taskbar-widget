@@ -50,6 +50,8 @@ let widgetManuallyHidden = false // 트레이 메뉴로 사용자가 직접 숨�
 let widgetHiddenForFullscreen = false
 let popupHideTimer: NodeJS.Timeout | null = null
 let popupRevealTimer: NodeJS.Timeout | null = null
+let lastDockedWidgetClickAt = 0
+const DOUBLE_CLICK_WINDOW_MS = 500
 
 function getAppState(): AppState {
   return {
@@ -125,7 +127,7 @@ async function layoutWidget() {
     dockRepairPending = false
     TaskbarDocker.startDockWatcher(
       widgetWindow,
-      () => togglePopup(),
+      () => handleDockedWidgetClick(),
       () => {
         console.log('[Main] Explorer restart or dock lost detected, re-docking widget...')
         dockRepairPending = true
@@ -365,6 +367,24 @@ function hidePopup(force = false) {
   }
 }
 
+// 도킹 모드 위젯 클릭: 네이티브 워처가 물리 클릭마다 CLICK 한 줄을 보내므로,
+// 더블클릭 설정이 켜져 있으면 여기서 500ms 창으로 두 번째 클릭을 기다렸다가 연다.
+function handleDockedWidgetClick() {
+  if (!accountStore.getConfig().doubleClickToOpenPopup) {
+    lastDockedWidgetClickAt = 0
+    void togglePopup()
+    return
+  }
+
+  const now = Date.now()
+  if (lastDockedWidgetClickAt > 0 && now - lastDockedWidgetClickAt <= DOUBLE_CLICK_WINDOW_MS) {
+    lastDockedWidgetClickAt = 0
+    void togglePopup()
+  } else {
+    lastDockedWidgetClickAt = now
+  }
+}
+
 async function togglePopup() {
   cancelHidePopup()
   if (popupWindow && popupWindow.isVisible()) {
@@ -505,6 +525,10 @@ function setupIpcHandlers() {
     const prevConfig = accountStore.getConfig()
     const nextConfig: WidgetConfig = { ...prevConfig, ...patch }
     accountStore.saveConfig(nextConfig)
+
+    if (patch.doubleClickToOpenPopup !== undefined) {
+      lastDockedWidgetClickAt = 0
+    }
 
     // 윈도우 시작 시 실행 설정 변경 시 적용
     if (patch.openAtLogin !== undefined && prevConfig.openAtLogin !== nextConfig.openAtLogin) {
