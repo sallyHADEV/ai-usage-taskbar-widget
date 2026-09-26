@@ -6,6 +6,7 @@ import { IPC_CHANNELS } from '../common/ipc-events.js'
 import type { AccountConfig, AppState, WidgetConfig } from '../common/types.js'
 import { AccountStore } from '../services/account-store.js'
 import { QuotaManager } from '../services/quota-manager.js'
+import { pushUsage } from '../services/usage-push.js'
 import { calculatePopupPosition, calculateWidgetPosition, getTaskbarInfo } from './taskbar-position.js'
 import { LocalAppDetector } from '../services/local-app-detector.js'
 import { TaskbarDocker } from './taskbar-docker.js'
@@ -675,8 +676,9 @@ app.whenReady().then(() => {
   accountStore = new AccountStore()
   quotaManager = new QuotaManager(accountStore)
 
-  quotaManager.addListener(() => {
+  quotaManager.addListener((usages) => {
     broadcastState()
+    void pushUsage(usages, accountStore.getConfig())
   })
 
   setupIpcHandlers()

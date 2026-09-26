@@ -74,6 +74,9 @@ export interface WidgetConfig {
   showCardBackground?: boolean // 배경 카드 박스 표시 여부 (false 시 완전 투명/작업표시줄 일체화)
   openAtLogin?: boolean // 윈도우 시작 시 자동 실행
   doubleClickToOpenPopup?: boolean // true면 위젯 더블클릭으로만 상세 팝업 열기 (기본 false)
+  apiPushEnabled?: boolean // 쿼터 갱신 시 사용량을 apiEndpoint 로 POST (기본 false)
+  apiEndpoint?: string // 기본 http://localhost:8080/api/usage
+  apiScreen?: number // 페이로드의 screen 번호 (기본 1)
 }
 
 export interface AppState {

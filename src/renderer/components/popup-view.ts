@@ -3,7 +3,7 @@ import type { AccountConfig, AccountUsage, AppState, ThemeType, WidgetConfig } f
 import { renderAiIcon } from './ai-icons.js'
 import { t } from '../../common/i18n.js'
 
-let activeTab: 'usage' | 'accounts' | 'settings' = 'usage'
+let activeTab: 'usage' | 'accounts' | 'settings' | 'api' = 'usage'
 let hasDetectedApps = false
 let isAddingCustom = false
 let isSliderDragging = false
@@ -19,6 +19,10 @@ let cachedDetectedApps: any[] = [
 export function renderPopupView(container: HTMLElement, state: AppState, animate = false) {
   // 슬라이더 드래그 중에는 사용자 조작(포커스/마우스) 보호를 위해 전체 DOM 재작성 방지
   if (isSliderDragging) {
+    return
+  }
+  // 입력 중 쿼터 갱신으로 재렌더링되면 타이핑하던 값이 날아간다
+  if (document.activeElement?.matches('.api-input')) {
     return
   }
 
@@ -48,6 +52,7 @@ export function renderPopupView(container: HTMLElement, state: AppState, animate
         <div class="popup-tab ${activeTab === 'usage' ? 'active' : ''}" data-tab="usage">${t('tabUsage')}</div>
         <div class="popup-tab ${activeTab === 'accounts' ? 'active' : ''}" data-tab="accounts">${t('tabAccounts')}</div>
         <div class="popup-tab ${activeTab === 'settings' ? 'active' : ''}" data-tab="settings">${t('tabSettings')}</div>
+        <div class="popup-tab ${activeTab === 'api' ? 'active' : ''}" data-tab="api">${t('tabApi')}</div>
       </div>
 
       <!-- 본문 -->
@@ -70,7 +75,50 @@ function renderTabContent(state: AppState): string {
   if (activeTab === 'accounts') {
     return renderAccountsTab(state)
   }
+  if (activeTab === 'api') {
+    return renderApiTab(state)
+  }
   return renderSettingsTab(state)
+}
+
+const escapeAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+
+function renderApiTab(state: AppState): string {
+  const cfg = state.config
+  const inputStyle = 'background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 6px; border-radius: 4px;'
+
+  return `
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <div class="form-group">
+        <label class="form-label switch-container" for="chk-api-push">
+          <div>
+            <span>${t('apiPushLabel')}</span>
+            <div style="font-size: 9px; color: var(--text-muted); font-weight: 400;">
+              ${t('apiPushDesc')}
+            </div>
+          </div>
+          <div class="md-switch">
+            <input type="checkbox" id="chk-api-push" ${cfg.apiPushEnabled ? 'checked' : ''} />
+            <div class="md-switch-track">
+              <div class="md-switch-thumb"></div>
+            </div>
+          </div>
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="inp-api-endpoint">${t('apiEndpointLabel')}</label>
+        <input type="url" class="api-input" id="inp-api-endpoint" style="${inputStyle}"
+          value="${escapeAttr(cfg.apiEndpoint || 'http://localhost:8080/api/usage')}" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="inp-api-screen">${t('apiScreenLabel')}</label>
+        <input type="number" class="api-input" id="inp-api-screen" min="1" step="1" style="${inputStyle}"
+          value="${cfg.apiScreen ?? 1}" />
+      </div>
+    </div>
+  `
 }
 
 function badgeClass(u: AccountUsage): string {
@@ -516,7 +564,7 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
       const tabName = tabEl.getAttribute('data-tab') as any
       if (tabName) {
         activeTab = tabName
-        if (activeTab === 'settings' || activeTab === 'accounts') {
+        if (activeTab === 'settings' || activeTab === 'accounts' || activeTab === 'api') {
           window.api.lockPopup() // 설정이나 계정 관리 조작 중에는 팝업 잠금 유지
         }
         renderPopupView(container, state)
@@ -746,6 +794,25 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
       window.api.updateConfig({ alphaPercent: val })
     })
   }
+
+  container.querySelector('#chk-api-push')?.addEventListener('change', (e) => {
+    window.api.updateConfig({ apiPushEnabled: (e.target as HTMLInputElement).checked })
+  })
+
+  // change 는 blur/Enter 때만 발생 — 타이핑 중엔 저장하지 않는다
+  const inpEndpoint = container.querySelector('#inp-api-endpoint') as HTMLInputElement
+  inpEndpoint?.addEventListener('change', () => {
+    const val = inpEndpoint.value.trim()
+    if (/^https?:\/\/\S+$/i.test(val)) window.api.updateConfig({ apiEndpoint: val })
+    else inpEndpoint.value = state.config.apiEndpoint || 'http://localhost:8080/api/usage'
+  })
+
+  const inpScreen = container.querySelector('#inp-api-screen') as HTMLInputElement
+  inpScreen?.addEventListener('change', () => {
+    const val = parseInt(inpScreen.value, 10)
+    if (val >= 1) window.api.updateConfig({ apiScreen: val })
+    else inpScreen.value = String(state.config.apiScreen ?? 1)
+  })
 
   const selInterval = container.querySelector('#sel-interval') as HTMLSelectElement
   selInterval?.addEventListener('change', () => {

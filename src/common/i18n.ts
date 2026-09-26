@@ -21,6 +21,12 @@ const dict = {
   tabUsage: { ko: '사용량 현황', en: 'Usage' },
   tabAccounts: { ko: '계정 관리', en: 'Accounts' },
   tabSettings: { ko: '위젯 설정', en: 'Settings' },
+  tabApi: { ko: 'API', en: 'API' },
+
+  apiPushLabel: { ko: '사용량 API 푸시', en: 'Push Usage to API' },
+  apiPushDesc: { ko: '쿼터가 갱신될 때마다 사용량(%)을 엔드포인트로 POST 합니다', en: 'POSTs usage (%) to the endpoint on every quota refresh' },
+  apiEndpointLabel: { ko: '엔드포인트 주소 (POST)', en: 'Endpoint URL (POST)' },
+  apiScreenLabel: { ko: '스크린 번호', en: 'Screen Number' },
 
   noActiveAccounts: { ko: '활성화된 계정이 없습니다.', en: 'No active accounts.' },
   addAccountHint: { ko: '[계정 관리] 탭에서 감지된 로컬 계정을 추가하세요.', en: 'Add a detected local account from the [Accounts] tab.' },
