@@ -59,6 +59,7 @@ export class ClaudeLocalClient {
         iconLetter: 'C',
         brandColor: '#D97757',
         tier: `${subscriptionType.toUpperCase()} (실시간 세션)`,
+        dataSource: 'claude-cli',
         status: 'ready',
         primaryQuota: {
           remainingFraction: (100 - primaryPercent) / 100,

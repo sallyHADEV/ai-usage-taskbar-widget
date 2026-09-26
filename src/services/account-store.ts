@@ -3,6 +3,7 @@ import path from 'node:path'
 import { app } from 'electron'
 import type { AccountConfig, WidgetConfig } from '../common/types.js'
 import type { DetectedApp } from './local-app-detector.js'
+import { mergeClaudeAccounts } from './claude-account-migration.js'
 
 const DEFAULT_CONFIG: WidgetConfig = {
   theme: '1a',
@@ -97,10 +98,11 @@ export class AccountStore {
         if (Array.isArray(parsed) && parsed.length > 0) {
           // 제거된 Google 로그인 기능이 남긴 계정(리프레시 토큰 포함)을 디스크에서 삭제
           const kept = parsed.filter((a: { provider?: string; tokens?: unknown }) => a.provider !== 'google' && !a.tokens)
-          if (kept.length !== parsed.length) {
-            this.atomicWriteFileSync(this.accountsPath, JSON.stringify(kept, null, 2))
+          const merged = mergeClaudeAccounts(kept)
+          if (kept.length !== parsed.length || merged !== kept) {
+            this.atomicWriteFileSync(this.accountsPath, JSON.stringify(merged, null, 2))
           }
-          return kept.length > 0 ? kept : createDefaultAccounts()
+          return merged.length > 0 ? merged : createDefaultAccounts()
         }
       }
     } catch (err) {
@@ -132,7 +134,7 @@ export class AccountStore {
   }
 
   public saveAccounts(accounts: AccountConfig[]): void {
-    this.accounts = [...accounts]
+    this.accounts = mergeClaudeAccounts([...accounts])
     this.atomicWriteFileSync(this.accountsPath, JSON.stringify(this.accounts, null, 2))
   }
 
@@ -145,6 +147,9 @@ export class AccountStore {
   }
 
   public addAccount(account: AccountConfig): void {
+    if (account.id === 'local-claude-desktop' && account.provider === 'claude') {
+      account = { ...account, id: 'local-claude-code', name: 'Claude Code' }
+    }
     const existingIndex = this.accounts.findIndex(a => a.id === account.id)
     if (existingIndex >= 0) {
       this.accounts[existingIndex] = { ...this.accounts[existingIndex], ...account, enabled: true }

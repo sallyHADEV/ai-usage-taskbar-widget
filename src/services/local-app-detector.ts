@@ -5,6 +5,7 @@ import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
 import { LocalLspClient } from './local-lsp-client.js'
 import { CodexAppServerClient } from './codex-app-server-client.js'
+import { ClaudeDesktopClient } from './claude-desktop-client.js'
 
 const execAsync = promisify(exec)
 
@@ -58,13 +59,25 @@ export class LocalAppDetector {
       } catch {}
     }
 
+    // CLI를 우선 사용하고 실패 시 데스크톱 앱 기록을 사용한다.
+    const desktopHistoryPath = ClaudeDesktopClient.getUsageHistoryPath()
+    const desktopDetected = !!desktopHistoryPath && fs.existsSync(desktopHistoryPath)
+    let desktopRunning = false
+    try {
+      const { stdout } = await execAsync('tasklist /FI "IMAGENAME eq Claude.exe" /FO CSV /NH', { timeout: 2000, windowsHide: true })
+      desktopRunning = /^"Claude\.exe"/im.test(stdout.trim())
+    } catch {}
+    const claudeAvailable = claudeInstalled || desktopDetected || fs.existsSync(path.join(process.env.APPDATA || '', 'Claude'))
     results.push({
       id: 'local-claude-code',
       name: 'Claude Code',
       provider: 'claude',
-      installed: claudeInstalled,
-      running: claudeLoggedIn,
-      description: claudeLoggedIn ? '로컬 로그인 세션 감지됨' : (claudeInstalled ? '설치됨 (연결 가능)' : '미설치'),
+      installed: claudeAvailable,
+      running: claudeLoggedIn || desktopRunning,
+      description: claudeLoggedIn && desktopDetected
+        ? 'CLI 로그인 · 앱 사용량 기록 감지됨'
+        : claudeLoggedIn ? 'CLI 로그인 세션 감지됨'
+          : desktopDetected ? '앱 사용량 기록 감지됨' : (claudeAvailable ? '설치됨 (연결 가능)' : '미설치'),
       iconLetter: 'C',
       brandColor: '#D97757'
     })

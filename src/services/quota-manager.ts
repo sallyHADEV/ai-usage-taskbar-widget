@@ -1,5 +1,5 @@
 import { AntigravityCliClient } from './antigravity-cli-client.js'
-import { ClaudeLocalClient } from './claude-local-client.js'
+import { fetchClaudeUsage } from './claude-usage-client.js'
 import { CodexLocalClient } from './codex-local-client.js'
 import { AccountStore } from './account-store.js'
 import type { AccountConfig, AccountUsage } from '../common/types.js'
@@ -148,7 +148,7 @@ export class QuotaManager {
               this.usages.set(acc.id, usage)
               return
             } else if (acc.provider === 'claude') {
-              usage = await ClaudeLocalClient.fetchUsage(acc)
+              usage = await fetchClaudeUsage(acc)
             } else if (acc.provider === 'codex') {
               usage = await CodexLocalClient.fetchUsage(acc)
             } else if (QuotaManager.isManualAccount(acc)) {
