@@ -4,6 +4,7 @@ import { app } from 'electron'
 import type { AccountConfig, WidgetConfig } from '../common/types.js'
 import type { DetectedApp } from './local-app-detector.js'
 import { mergeClaudeAccounts } from './claude-account-migration.js'
+import { DEFAULT_API_ENDPOINT } from './usage-push.js'
 
 const DEFAULT_CONFIG: WidgetConfig = {
   theme: '1a',
@@ -20,7 +21,10 @@ const DEFAULT_CONFIG: WidgetConfig = {
   placementMode: 'docked',
   alwaysOnTop: true,
   openAtLogin: true,
-  doubleClickToOpenPopup: false
+  doubleClickToOpenPopup: false,
+  apiPushEnabled: false,
+  apiEndpoint: DEFAULT_API_ENDPOINT,
+  apiScreen: 1
 }
 
 // 쿼터 수치는 전부 실시간 조회로 채운다. 프리셋 숫자를 넣어두면 조회 실패 시 그게 정상값처럼 표시된다.
