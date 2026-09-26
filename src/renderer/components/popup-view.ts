@@ -4,6 +4,7 @@ import { renderAiIcon } from './ai-icons.js'
 import { t } from '../../common/i18n.js'
 
 let activeTab: 'usage' | 'accounts' | 'settings' = 'usage'
+let hasDetectedApps = false
 let isAddingCustom = false
 let isSliderDragging = false
 
@@ -83,6 +84,10 @@ function badgeClass(u: AccountUsage): string {
 function statusLine(u: AccountUsage): string {
   if (u.status === 'error' || u.status === 'unauthenticated') {
     return u.errorMessage || t('statusUnavailable')
+  }
+  if (u.dataSource === 'claude-desktop' && (u.status === 'ready' || u.status === 'stale')) {
+    const key = u.status === 'stale' ? 'desktopHistoryStale' : 'desktopHistory'
+    return t(key, { time: new Date(u.updatedAt).toLocaleString() })
   }
   if (u.status === 'stale') {
     return t('statusStale', { time: new Date(u.updatedAt).toLocaleString() })
@@ -515,6 +520,13 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
           window.api.lockPopup() // 설정이나 계정 관리 조작 중에는 팝업 잠금 유지
         }
         renderPopupView(container, state)
+        if (activeTab === 'accounts' && !hasDetectedApps) {
+          hasDetectedApps = true
+          window.api.detectLocalApps().then((apps) => {
+            if (apps && apps.length > 0) cachedDetectedApps = apps
+            if (activeTab === 'accounts' && container.isConnected) renderPopupView(container, state)
+          }).catch(() => { hasDetectedApps = false })
+        }
       }
     }
   })
@@ -585,6 +597,7 @@ function bindPopupEvents(container: HTMLElement, state: AppState) {
     const apps = await window.api.detectLocalApps()
     if (apps && apps.length > 0) {
       cachedDetectedApps = apps
+      hasDetectedApps = true
     }
     renderPopupView(container, state)
     window.api.refreshQuota()

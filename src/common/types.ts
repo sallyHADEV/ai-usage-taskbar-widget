@@ -27,6 +27,7 @@ export interface AccountUsage {
   brandColor: string // #FF6B4A, #4285F4, #00D1B2, #D946EF 등
   email?: string
   tier?: string
+  dataSource?: 'claude-cli' | 'claude-desktop'
   projectId?: string
   // 'stale' = 마지막 성공 실측값을 그대로 보여주는 중 (갱신 실패). updatedAt은 그 실측 시각을 유지한다
   status: 'ready' | 'loading' | 'error' | 'unauthenticated' | 'stale'

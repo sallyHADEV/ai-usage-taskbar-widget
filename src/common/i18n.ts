@@ -28,6 +28,8 @@ const dict = {
   statusLoading: { ko: '조회 중', en: 'Loading' },
   statusUnavailable: { ko: '사용량을 가져오지 못했습니다', en: 'Usage unavailable' },
   statusStale: { ko: '갱신 실패 — {time} 기준 마지막 실측값', en: 'Update failed — last reading at {time}' },
+  desktopHistory: { ko: 'Claude 앱 기록 · {time}', en: 'Claude app reading · {time}' },
+  desktopHistoryStale: { ko: 'Claude 앱 기록이 오래됨 · {time}', en: 'Claude app reading is old · {time}' },
   statusEstimated: { ko: '추정치', en: 'Estimated' },
   modelQuotaTitle: { ko: '모델별 세부 쿼터', en: 'Per-model quota' },
   sessionLimit5h: { ko: '5시간 세션 한도', en: '5-Hour Session Limit' },
