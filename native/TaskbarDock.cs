@@ -20,6 +20,10 @@ namespace FluentFlyoutDocker
         [DllImport("user32.dll", ExactSpelling = true)]
         static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
         const uint GA_PARENT = 1;
+        const uint GA_ROOT = 2;
+
+        [DllImport("user32.dll")]
+        static extern IntPtr WindowFromPoint(POINT point);
 
         [DllImport("user32.dll", SetLastError = true)]
         static extern int GetWindowLong(IntPtr hWnd, int nIndex);
@@ -268,6 +272,16 @@ namespace FluentFlyoutDocker
                 && winRect.Top <= mi.rcMonitor.Top
                 && winRect.Right >= mi.rcMonitor.Right
                 && winRect.Bottom >= mi.rcMonitor.Bottom;
+        }
+
+        // 커서가 위젯 영역 안이고, 그 지점의 최상위 창이 작업표시줄(=위젯이 실제로 보이는 상태)인지
+        static bool IsCursorOnWidget(IntPtr widget, IntPtr taskbar)
+        {
+            POINT p;
+            RECT r;
+            return GetCursorPos(out p) && GetWindowRect(widget, out r)
+                && p.X >= r.Left && p.X < r.Right && p.Y >= r.Top && p.Y < r.Bottom
+                && GetAncestor(WindowFromPoint(p), GA_ROOT) == taskbar;
         }
 
         static int RunAction(string[] args)
@@ -563,6 +577,7 @@ namespace FluentFlyoutDocker
                 IntPtr widget = ParseHwnd(args[1]);
                 IntPtr taskbar = ParseHwnd(args[2]);
                 bool previousDown = false;
+                bool pressedOnWidget = false;
 
                 while (IsWindow(widget))
                 {
@@ -575,13 +590,13 @@ namespace FluentFlyoutDocker
 
                     bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 
-                    // mouse-up 순간 감지
-                    if (!down && previousDown)
+                    // 누른 순간과 뗀 순간 모두 위젯 위일 때만 클릭으로 인정
+                    // (전체화면 창이 위젯을 덮고 있거나, 다른 곳에서 드래그해 온 경우 무시)
+                    if (down != previousDown)
                     {
-                        POINT p;
-                        RECT r;
-                        if (GetCursorPos(out p) && GetWindowRect(widget, out r)
-                            && p.X >= r.Left && p.X < r.Right && p.Y >= r.Top && p.Y < r.Bottom)
+                        bool onWidget = IsCursorOnWidget(widget, taskbar);
+                        if (down) pressedOnWidget = onWidget;
+                        else if (pressedOnWidget && onWidget)
                         {
                             Console.WriteLine("CLICK");
                             Console.Out.Flush();
