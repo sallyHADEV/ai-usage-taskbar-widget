@@ -1,5 +1,7 @@
 # Taskbar AI Token Usage Widget (작업표시줄 AI 토큰 사용량 모니터 위젯)
 
+**한국어** | [English](README.en.md)
+
 Windows 작업표시줄 상에 위치하여 복수의 AI 계정(Antigravity, Claude, Codex, 커스텀 AI)의 5시간 세션 쿼터 및 주간 사용량, 리셋 카운트다운을 실시간으로 모니터링하는 초경량 데스크톱 위젯입니다.
 
 ![스크린샷](img/01.png)
