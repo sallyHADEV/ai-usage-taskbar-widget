@@ -35,7 +35,7 @@ A lightweight Windows desktop widget that sits on the taskbar and monitors, in r
 
 5. **Account integrations & unlimited multi-account management**:
    - **Antigravity (no authentication)**: Uses the already signed-in `agy` CLI as a bridge. The app parses the output of `agy -p "/usage" --output-format json` (read-only, consumes no quota), so it never handles accounts, tokens, or keys. Requires `agy` CLI 1.1.11 or later; if the CLI is missing or unresponsive, the last measured value or an error state is shown.
-   - **Claude**: Shows a single Claude account. It first tries live usage via the CLI login, and if that fails, reads the 5-hour and 7-day usage from the Windows desktop app's `%APPDATA%\Claude\plan-usage-history.json` history. Values not updated for over an hour are marked as stale. The app history has no reset times, so they are shown as `--`.
+   - **Claude**: Shows a single Claude account. It first tries the CLI login, then uses the Windows desktop app's existing session to fetch live 5-hour and weekly usage and reset times, without another login or closing the app. It discovers standalone and Microsoft Store data directories and reads the OAuth V2 cache from `config.json` and the encryption key from `Local State`. Tokens, account IDs, and user paths are never hardcoded or logged. If live lookup fails, it falls back to `plan-usage-history.json`; records older than an hour are marked stale, and missing reset times appear as `--`.
    - **Custom/mock accounts**: Add, toggle, and remove as many accounts as you like.
 
 6. **Details popup on click (with motion)**:

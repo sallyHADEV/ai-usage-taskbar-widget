@@ -43,6 +43,15 @@ test('CLI 예외 발생 시에도 오래된 앱 기록으로 폴백한다', asyn
   assert.equal(result.status, 'stale')
 })
 
+test('CLI 실패 후 비동기 데스크톱 실시간 조회 결과를 기다린다', async () => {
+  const result = await fetchClaudeUsage(account, {
+    cli: async () => usage('error', 'claude-cli'),
+    desktop: async () => usage('ready', 'claude-desktop-live')
+  })
+  assert.equal(result.status, 'ready')
+  assert.equal(result.dataSource, 'claude-desktop-live')
+})
+
 test('두 소스가 모두 실패하면 정상 사용량처럼 표시하지 않는다', async () => {
   const result = await fetchClaudeUsage(account, {
     cli: async () => usage('error', 'claude-cli'),

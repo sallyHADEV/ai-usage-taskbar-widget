@@ -149,6 +149,19 @@ export class QuotaManager {
               return
             } else if (acc.provider === 'claude') {
               usage = await fetchClaudeUsage(acc)
+              if (usage.status === 'ready' || usage.status === 'stale') {
+                this.lastGood.set(acc.id, usage)
+              } else {
+                const last = this.lastGood.get(acc.id)
+                if (last) {
+                  usage = {
+                    ...last,
+                    status: 'stale',
+                    errorMessage: usage.errorMessage,
+                    tier: `${last.tier ?? ''} (마지막 실측)`.trim()
+                  }
+                }
+              }
             } else if (acc.provider === 'codex') {
               usage = await CodexLocalClient.fetchUsage(acc)
             } else if (QuotaManager.isManualAccount(acc)) {

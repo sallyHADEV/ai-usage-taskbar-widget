@@ -4,7 +4,7 @@ import { ClaudeDesktopClient } from './claude-desktop-client.js'
 
 type UsageSources = {
   cli: () => Promise<AccountUsage>
-  desktop: () => AccountUsage
+  desktop: () => AccountUsage | Promise<AccountUsage>
 }
 
 function sourceError(account: AccountConfig, reason: string): AccountUsage {
@@ -23,7 +23,7 @@ function sourceError(account: AccountConfig, reason: string): AccountUsage {
 
 export async function fetchClaudeUsage(account: AccountConfig, sources: UsageSources = {
   cli: () => ClaudeLocalClient.fetchUsage(account),
-  desktop: () => ClaudeDesktopClient.fetchUsage(account)
+  desktop: () => ClaudeDesktopClient.fetchLiveOrHistory(account)
 }): Promise<AccountUsage> {
   let cliUsage: AccountUsage
   try {
@@ -35,7 +35,7 @@ export async function fetchClaudeUsage(account: AccountConfig, sources: UsageSou
 
   let desktopUsage: AccountUsage
   try {
-    desktopUsage = sources.desktop()
+    desktopUsage = await sources.desktop()
   } catch (err) {
     desktopUsage = sourceError(account, err instanceof Error ? err.message : String(err))
   }
