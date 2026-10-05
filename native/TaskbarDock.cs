@@ -48,6 +48,9 @@ namespace FluentFlyoutDocker
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+
         [DllImport("user32.dll")]
         static extern bool GetCursorPos(out POINT lpPoint);
 
@@ -413,15 +416,31 @@ namespace FluentFlyoutDocker
                     currentParent = GetAncestor(childHwnd, GA_PARENT);
                 }
 
-                if (currentParent != taskbarHwnd)
+                bool isParented = (currentParent == taskbarHwnd);
+                int finalX = widgetX;
+                int finalY = widgetY;
+                IntPtr insertAfter = HWND_TOP;
+
+                if (!isParented)
                 {
-                    int err = Marshal.GetLastWin32Error();
-                    Console.WriteLine(string.Format("PARENT_VERIFY_FAILED:{0}", err));
-                    return 5;
+                    // SetParent 거부 시 (Windows 11 최신 보안 등): WS_POPUP 유지, Screen 좌표계로 오버레이 배치
+                    style = (style & ~WS_CHILD) | WS_POPUP;
+                    SetWindowLong(childHwnd, GWL_STYLE, style);
+                    exStyle = (exStyle | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW;
+                    SetWindowLong(childHwnd, GWL_EXSTYLE, exStyle);
+
+                    POINT pt = new POINT();
+                    pt.X = widgetX;
+                    pt.Y = widgetY;
+                    ClientToScreen(taskbarHwnd, ref pt);
+                    finalX = pt.X;
+                    finalY = pt.Y;
+                    insertAfter = HWND_TOPMOST;
+                    currentParent = IntPtr.Zero;
                 }
 
-                // 5) Client 좌표계로 위치 및 크기 설정 (HWND_TOP 사용, SWP_NOZORDER 제거로 child Z-order 최상위 승격, 높이는 widgetHeightPx)
-                bool posOk = SetWindowPos(childHwnd, HWND_TOP, widgetX, widgetY, widgetWidthPx, widgetHeightPx,
+                // 5) 위치 및 크기 설정
+                bool posOk = SetWindowPos(childHwnd, insertAfter, finalX, finalY, widgetWidthPx, widgetHeightPx,
                     SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
                 if (!posOk)
