@@ -1,8 +1,16 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { AccountConfig, AccountUsage, QuotaInfo } from '../common/types.js'
+import { findClaudeDataDirs, fetchClaudeDesktopLiveUsage, ClaudeRateLimitError } from './claude-desktop-oauth.js'
+import { formatCountdown } from '../common/time-utils.js'
 
 const MAX_SAMPLE_AGE_MS = 60 * 60 * 1000
+const LIVE_MIN_INTERVAL_MS = 2 * 60 * 1000
+
+export function refreshCountdowns(usage: AccountUsage): AccountUsage {
+  const refresh = (q?: QuotaInfo) => q && { ...q, resetCountdown: q.resetTime ? formatCountdown(q.resetTime) : q.resetCountdown }
+  return { ...usage, primaryQuota: refresh(usage.primaryQuota)!, weeklyQuota: refresh(usage.weeklyQuota) }
+}
 
 interface UsageSample {
   t: number
@@ -59,9 +67,51 @@ export function parseClaudeDesktopUsage(raw: unknown, account: AccountConfig, no
 }
 
 export class ClaudeDesktopClient {
+  private static pending?: Promise<AccountUsage>
+  private static lastAttempt = 0
+  private static lastResult?: AccountUsage
+
   public static getUsageHistoryPath(): string | null {
-    const appData = process.env.APPDATA
-    return appData ? path.join(appData, 'Claude', 'plan-usage-history.json') : null
+    return findClaudeDataDirs().map(dir => path.join(dir, 'plan-usage-history.json'))
+      .find(file => fs.existsSync(file)) || null
+  }
+
+  public static async fetchLiveOrHistory(account: AccountConfig): Promise<AccountUsage> {
+    if (this.pending) return { ...await this.pending, id: account.id, name: account.name }
+    if (this.lastResult && Date.now() - this.lastAttempt < 15000) {
+      return { ...this.lastResult, id: account.id, name: account.name }
+    }
+    this.lastAttempt = Date.now()
+    this.pending = this.fetchLiveThrottled(account)
+    try {
+      this.lastResult = await this.pending
+      return this.lastResult
+    } finally { this.pending = undefined }
+  }
+
+  // 사용량 API는 요청 제한(429)이 빡빡하다. 성공 후에는 LIVE_MIN_INTERVAL_MS, 429 후에는 Retry-After 동안
+  // 다시 부르지 않고 마지막 실측값(리셋 카운트다운만 갱신)을 보여 준다. 실측값이 없을 때만 앱 기록으로 폴백
+  private static lastLive?: AccountUsage
+  private static lastLiveAt = 0
+  private static liveBlockedUntil = 0
+
+  private static async fetchLiveThrottled(account: AccountConfig): Promise<AccountUsage> {
+    const now = Date.now()
+    const canCall = now >= this.liveBlockedUntil && (!this.lastLive || now - this.lastLiveAt >= LIVE_MIN_INTERVAL_MS)
+    if (canCall) {
+      try {
+        this.lastLive = await fetchClaudeDesktopLiveUsage(account)
+        this.lastLiveAt = Date.now()
+        return this.lastLive
+      } catch (err) {
+        if (err instanceof ClaudeRateLimitError) this.liveBlockedUntil = Date.now() + err.retryAfterMs
+        console.warn('[ClaudeDesktopClient]', err instanceof Error ? err.message : String(err))
+      }
+    }
+    if (this.lastLive && Date.now() - this.lastLiveAt < MAX_SAMPLE_AGE_MS) {
+      return { ...refreshCountdowns(this.lastLive), id: account.id, name: account.name }
+    }
+    return this.fetchUsage(account)
   }
 
   public static fetchUsage(account: AccountConfig): AccountUsage {

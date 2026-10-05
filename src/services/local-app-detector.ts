@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 import { LocalLspClient } from './local-lsp-client.js'
 import { CodexAppServerClient } from './codex-app-server-client.js'
 import { ClaudeDesktopClient } from './claude-desktop-client.js'
+import { findClaudeDataDirs } from './claude-desktop-oauth.js'
 
 const execAsync = promisify(exec)
 
@@ -59,7 +60,11 @@ export class LocalAppDetector {
       } catch {}
     }
 
-    // CLI를 우선 사용하고 실패 시 데스크톱 앱 기록을 사용한다.
+    // CLI를 우선 사용하고 실패 시 데스크톱 앱 실시간 세션 또는 기록을 사용한다.
+    const desktopDirs = findClaudeDataDirs()
+    const desktopSessionDetected = desktopDirs.some(dir =>
+      fs.existsSync(path.join(dir, 'config.json')) && fs.existsSync(path.join(dir, 'Local State'))
+    )
     const desktopHistoryPath = ClaudeDesktopClient.getUsageHistoryPath()
     const desktopDetected = !!desktopHistoryPath && fs.existsSync(desktopHistoryPath)
     let desktopRunning = false
@@ -67,17 +72,18 @@ export class LocalAppDetector {
       const { stdout } = await execAsync('tasklist /FI "IMAGENAME eq Claude.exe" /FO CSV /NH', { timeout: 2000, windowsHide: true })
       desktopRunning = /^"Claude\.exe"/im.test(stdout.trim())
     } catch {}
-    const claudeAvailable = claudeInstalled || desktopDetected || fs.existsSync(path.join(process.env.APPDATA || '', 'Claude'))
+    const claudeAvailable = claudeInstalled || desktopSessionDetected || desktopDetected || desktopDirs.length > 0
     results.push({
       id: 'local-claude-code',
       name: 'Claude Code',
       provider: 'claude',
       installed: claudeAvailable,
       running: claudeLoggedIn || desktopRunning,
-      description: claudeLoggedIn && desktopDetected
-        ? 'CLI 로그인 · 앱 사용량 기록 감지됨'
+      description: claudeLoggedIn && desktopSessionDetected
+        ? 'CLI 로그인 · 데스크톱 실시간 세션 감지됨'
         : claudeLoggedIn ? 'CLI 로그인 세션 감지됨'
-          : desktopDetected ? '앱 사용량 기록 감지됨' : (claudeAvailable ? '설치됨 (연결 가능)' : '미설치'),
+          : desktopSessionDetected ? '데스크톱 앱 실시간 세션 감지됨'
+            : desktopDetected ? '앱 사용량 기록 감지됨' : (claudeAvailable ? '설치됨 (연결 가능)' : '미설치'),
       iconLetter: 'C',
       brandColor: '#D97757'
     })
